@@ -33,6 +33,8 @@ EarthWidget::~EarthWidget()
 {
     makeCurrent();
     delete earthTexture;
+    delete heightMapTexture;
+    delete normalMapTexture;
     sphereVBO.destroy();
     sphereVAO.destroy();
     doneCurrent();
@@ -86,13 +88,13 @@ void EarthWidget::initTextures()
     earthTexture->setWrapMode(QOpenGLTexture::Repeat);
 
     // Карта высот
-    heightMapTexture = new QOpenGLTexture(QImage("./earth_height.png").mirrored());
+    heightMapTexture = new QOpenGLTexture(QImage("./earth_height.png1").mirrored());
     heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
 
     // Карта нормалей
-    normalMapTexture = new QOpenGLTexture(QImage("./earth_normal.png").mirrored());
+    normalMapTexture = new QOpenGLTexture(QImage("./earth_normal.png1").mirrored());
     normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
@@ -352,7 +354,7 @@ void EarthWidget::drawEarth()
     earthProgram.setUniformValue("model", earthMatrix);
     earthProgram.setUniformValue("viewPos", cameraPosition);
 
-    // Привязываем все текстуры
+    // Привязываем текстуры
     earthTexture->bind(0);
     heightMapTexture->bind(1);
     normalMapTexture->bind(2);

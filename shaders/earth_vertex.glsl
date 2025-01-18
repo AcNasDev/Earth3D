@@ -15,8 +15,6 @@ uniform mat4 model;
 void main()
 {
     TexCoord = texCoord;
-
-    // Вычисляем позицию в мировом пространстве
     FragPos = vec3(model * vec4(position, 1.0));
 
     // Вычисляем нормаль в мировом пространстве
