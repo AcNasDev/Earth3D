@@ -72,6 +72,7 @@ private:
     QOpenGLShaderProgram axisProgram;
     QOpenGLBuffer axisVBO;
     QOpenGLVertexArrayObject axisVAO;
+    QOpenGLVertexArrayObject trajectoryVAO;
 
     QMatrix4x4 projection;
     QMatrix4x4 view;

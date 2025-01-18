@@ -17,8 +17,11 @@ EarthWidget::EarthWidget(QWidget *parent)
     , selectedSatelliteId(-1)
     , rotationAngle(0.0f)
 {
-
+    setupSurfaceFormat();
     setFocusPolicy(Qt::StrongFocus);
+
+    // Устанавливаем политику обновления
+    setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
 
     animationTimer = new QTimer(this);
     connect(animationTimer, &QTimer::timeout, [this]() {
@@ -28,11 +31,6 @@ EarthWidget::EarthWidget(QWidget *parent)
         }
     });
     animationTimer->start(16);
-
-    setupSurfaceFormat();
-
-    // Устанавливаем политику обновления
-    setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
 }
 
 EarthWidget::~EarthWidget()
@@ -53,10 +51,11 @@ void EarthWidget::setupSurfaceFormat()
     QSurfaceFormat format;
     format.setDepthBufferSize(24);
     format.setStencilBufferSize(8);
+    format.setSamples(4); // Включаем MSAA (Multisample Anti-Aliasing)
     format.setVersion(3, 3);
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
-    format.setSwapInterval(1); // Включаем вертикальную синхронизацию
+    format.setSwapInterval(1); // Включаем V-Sync
     setFormat(format);
 }
 
@@ -65,20 +64,22 @@ void EarthWidget::initializeGL()
     initializeOpenGLFunctions();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-    // Настройка буфера глубины
+    // Включаем все необходимые возможности OpenGL
     glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
-
     glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);  // Отсекаем задние грани
+    glEnable(GL_MULTISAMPLE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Настройки качества
+    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
+    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
+    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
 
     initShaders();
     initTextures();
     initSphereGeometry();
     initAxisGeometry(); // Добавьте эту строку
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 void EarthWidget::initShaders()
@@ -256,14 +257,10 @@ void EarthWidget::paintGL()
     // Рисуем объекты с учетом глубины
     drawAxis(); // Добавляем отрисовку осей
     drawEarth();
-    drawSatellites();
-
+    drawTrajectories();
+    drawSatellites();   
     // Отключаем тест глубины для 2D элементов
     glDisable(GL_DEPTH_TEST);
-
-    if (selectedSatelliteId != -1) {
-        drawTrajectories();
-    }
     drawSatellitesInfo();
     update();
 }
@@ -422,11 +419,13 @@ void EarthWidget::drawEarth()
 
 void EarthWidget::drawSatellites()
 {
-    // Включаем тест глубины
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
     satelliteProgram.bind();
+
+    // Включаем сглаживание
+    glEnable(GL_MULTISAMPLE);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
     sphereVAO.bind();
 
     for (const auto& satellite : satellites) {
@@ -442,70 +441,94 @@ void EarthWidget::drawSatellites()
 
         satelliteProgram.setUniformValue("mvp", projection * view * satMatrix);
         satelliteProgram.setUniformValue("isSelected", satellite.isSelected);
+        satelliteProgram.setUniformValue("viewPos", cameraPosition);
 
         glDrawElements(GL_TRIANGLES, sphereVertexCount, GL_UNSIGNED_INT, 0);
     }
 
     sphereVAO.release();
     satelliteProgram.release();
-}
 
+    // Восстанавливаем настройки
+    glDisable(GL_BLEND);
+}
 void EarthWidget::drawTrajectories()
 {
     if (selectedSatelliteId == -1) return;
 
     const auto& satellite = satellites[selectedSatelliteId];
+    if (satellite.trajectory.isEmpty() && satellite.futureTrajectory.isEmpty()) return;
+
+    GLint previousDepthFunc;
+    glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunc);
 
     lineProgram.bind();
-    glEnable(GL_LINE_SMOOTH);
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glEnable(GL_LINE_SMOOTH);
+    glDepthFunc(GL_ALWAYS);
 
-    // Отрисовка полной орбиты (белая линия)
+    // Создаем VAO, если еще не создан
+    if (!trajectoryVAO.isCreated()) {
+        trajectoryVAO.create();
+    }
+    trajectoryVAO.bind();
+
+    // Рисуем текущую траекторию пунктиром
     if (!satellite.trajectory.isEmpty()) {
-        QOpenGLBuffer trajectoryVBO(QOpenGLBuffer::VertexBuffer);
-        trajectoryVBO.create();
-        trajectoryVBO.bind();
-        trajectoryVBO.allocate(satellite.trajectory.constData(),
-                               satellite.trajectory.size() * sizeof(QVector3D));
+        QVector<QVector3D> dashedLine;
+        // Создаем пунктирную линию из исходной траектории
+        for (int i = 0; i < satellite.trajectory.size() - 1; i += 2) {
+            dashedLine.append(satellite.trajectory[i]);
+            if (i + 1 < satellite.trajectory.size()) {
+                dashedLine.append(satellite.trajectory[i + 1]);
+            }
+        }
+
+        QOpenGLBuffer vbo(QOpenGLBuffer::VertexBuffer);
+        vbo.create();
+        vbo.bind();
+        vbo.allocate(dashedLine.constData(), dashedLine.size() * sizeof(QVector3D));
 
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(QVector3D), nullptr);
 
         lineProgram.setUniformValue("mvp", projection * view * model);
-        lineProgram.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 0.3f));
+        lineProgram.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 1.0f));
 
-        glLineWidth(1.0f);
-        // Используем GL_LINE_STRIP вместо GL_LINE_LOOP
-        glDrawArrays(GL_LINE_STRIP, 0, satellite.trajectory.size());
+        glLineWidth(2.0f);
+        glDrawArrays(GL_LINES, 0, dashedLine.size());
 
-        trajectoryVBO.release();
-        trajectoryVBO.destroy();
+        vbo.release();
+        vbo.destroy();
     }
 
-    // Отрисовка будущей траектории (голубая линия)
+    // Рисуем предсказанную траекторию сплошной линией
     if (!satellite.futureTrajectory.isEmpty()) {
-        QOpenGLBuffer futureVBO(QOpenGLBuffer::VertexBuffer);
-        futureVBO.create();
-        futureVBO.bind();
-        futureVBO.allocate(satellite.futureTrajectory.constData(),
-                           satellite.futureTrajectory.size() * sizeof(QVector3D));
+        QOpenGLBuffer vbo(QOpenGLBuffer::VertexBuffer);
+        vbo.create();
+        vbo.bind();
+        vbo.allocate(satellite.futureTrajectory.constData(),
+                     satellite.futureTrajectory.size() * sizeof(QVector3D));
 
         glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(QVector3D), nullptr);
 
         lineProgram.setUniformValue("mvp", projection * view * model);
-        lineProgram.setUniformValue("color", QVector4D(0.2f, 0.6f, 1.0f, 1.0f)); // яркий голубой
+        lineProgram.setUniformValue("color", QVector4D(0.0f, 1.0f, 1.0f, 0.8f));
 
         glLineWidth(2.0f);
         glDrawArrays(GL_LINE_STRIP, 0, satellite.futureTrajectory.size());
 
-        futureVBO.release();
-        futureVBO.destroy();
+        vbo.release();
+        vbo.destroy();
     }
 
+    trajectoryVAO.release();
     lineProgram.release();
-    glDisable(GL_LINE_SMOOTH);
+
+    glDepthFunc(previousDepthFunc);
 }
 
 int EarthWidget::pickSatellite(const QPoint& mousePos)
