@@ -3,55 +3,57 @@
 in vec2 TexCoord;
 in vec3 Normal;
 in vec3 FragPos;
-in mat3 TBN;
-
-out vec4 FragColor;
 
 uniform sampler2D earthTexture;
 uniform sampler2D heightMap;
 uniform sampler2D normalMap;
 uniform vec3 viewPos;
 
-// Увеличиваем значения для более заметного эффекта
-const float ambientStrength = 0.2;     // Уменьшаем фоновое освещение
-const float diffuseStrength = 1.0;     // Увеличиваем силу диффузного освещения
-const float heightScale = 0.15;        // Увеличиваем влияние карты высот
-const float normalStrength = 1.5;      // Усиливаем влияние нормалей
+out vec4 FragColor;
+
+const float heightScale = 0.2;      // Увеличили масштаб высот
+const float ambientStrength = 0.15;  // Уменьшили фоновое освещение для большего контраста
+const float diffuseStrength = 1.2;   // Усилили диффузное освещение
 
 void main()
 {
-    // Получаем значение высоты и усиливаем его контраст
+    // Получаем и усиливаем высоту
     float height = texture(heightMap, TexCoord).r;
-    height = pow(height, 0.8); // Нелинейное усиление высот
+    height = pow(height, 0.75); // Нелинейное усиление контраста высот
 
     // Получаем и усиливаем нормаль из карты нормалей
-    vec3 normalMapValue = texture(normalMap, TexCoord).rgb * 2.0 - 1.0;
-    normalMapValue *= normalStrength;
-    vec3 normal = normalize(TBN * normalMapValue);
+    vec3 normalMap = texture(normalMap, TexCoord).rgb * 2.0 - 1.0;
+    vec3 N = normalize(Normal + normalMap * 0.5);
 
-    // Базовый цвет текстуры
-    vec3 color = texture(earthTexture, TexCoord).rgb;
+    vec3 baseColor = texture(earthTexture, TexCoord).rgb;
 
     // Направление света (от фрагмента к камере)
     vec3 lightDir = normalize(viewPos - FragPos);
 
-    // Ambient
-    vec3 ambient = ambientStrength * color;
+    // Ambient с учетом высоты
+    vec3 ambient = ambientStrength * baseColor * (1.0 + height * 0.5);
 
-    // Diffuse с учетом высоты
-    float diff = max(dot(normal, lightDir), 0.0);
-    // Усиливаем освещение на возвышенностях
-    diff = diff * (1.0 + height * heightScale);
-    vec3 diffuse = diffuseStrength * diff * color;
+    // Diffuse с усилением на возвышенностях
+    float diff = max(dot(N, lightDir), 0.0);
+    diff = diff * (1.0 + height * heightScale); // Усиливаем освещение на возвышенностях
+    vec3 diffuse = diffuseStrength * diff * baseColor;
 
-    // Добавляем затемнение в низинах
-    float shadowFactor = mix(0.7, 1.0, height);
+    // Затемнение в низинах
+    float shadowFactor = mix(0.6, 1.0, height);
+
+    // Добавляем цветовой оттенок для высот
+    vec3 heightColor = mix(
+        vec3(0.2, 0.2, 0.4),  // Цвет низин (более темный и синий)
+        vec3(1.0, 0.95, 0.8),  // Цвет возвышенностей (более светлый и теплый)
+        height
+    );
 
     // Комбинируем все компоненты
-    vec3 finalColor = (ambient + diffuse) * shadowFactor;
+    vec3 result = (ambient + diffuse) * shadowFactor;
+    result *= mix(baseColor, heightColor, 0.3); // Смешиваем с цветом высот
 
-    // Добавляем небольшое усиление контраста
-    finalColor = pow(finalColor, vec3(1.1));
+    // Финальное усиление контраста
+    result = pow(result, vec3(1.1));
 
-    FragColor = vec4(finalColor, 1.0);
+    FragColor = vec4(result, 1.0);
 }

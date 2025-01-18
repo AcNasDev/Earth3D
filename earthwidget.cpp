@@ -88,7 +88,8 @@ void EarthWidget::initTextures()
     earthTexture->setWrapMode(QOpenGLTexture::Repeat);
 
     // Карта высот
-    heightMapTexture = new QOpenGLTexture(QImage("./earth_height.png").mirrored());
+    QImage heightImage = QImage("./earth_height.png").mirrored();
+    heightMapTexture = new QOpenGLTexture(heightImage);
     heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
@@ -102,8 +103,8 @@ void EarthWidget::initTextures()
 
 void EarthWidget::initSphereGeometry()
 {
-    const int segments = 64;
-    const int rings = 32;
+    const int segments = 1024;
+    const int rings = 512;
     QVector<GLfloat> vertices;
 
     // Генерация вершин сферы
@@ -353,6 +354,9 @@ void EarthWidget::drawEarth()
     earthProgram.setUniformValue("mvp", projection * view * earthMatrix);
     earthProgram.setUniformValue("model", earthMatrix);
     earthProgram.setUniformValue("viewPos", cameraPosition);
+
+    // Устанавливаем масштаб смещения (можно настраивать)
+    earthProgram.setUniformValue("displacementScale", 0.05f);
 
     // Привязываем текстуры
     earthTexture->bind(0);
