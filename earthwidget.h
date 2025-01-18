@@ -96,6 +96,7 @@ private:
     QTimer* animationTimer;
     float rotationAngle;
     bool showAxis = true; // Добавьте этот флаг
+    void setupSurfaceFormat();
 };
 
 #endif // EARTHWIDGET_H

@@ -17,6 +17,7 @@ EarthWidget::EarthWidget(QWidget *parent)
     , selectedSatelliteId(-1)
     , rotationAngle(0.0f)
 {
+
     setFocusPolicy(Qt::StrongFocus);
 
     animationTimer = new QTimer(this);
@@ -27,6 +28,11 @@ EarthWidget::EarthWidget(QWidget *parent)
         }
     });
     animationTimer->start(16);
+
+    setupSurfaceFormat();
+
+    // Устанавливаем политику обновления
+    setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
 }
 
 EarthWidget::~EarthWidget()
@@ -40,6 +46,18 @@ EarthWidget::~EarthWidget()
     axisVBO.destroy();
     axisVAO.destroy();
     doneCurrent();
+}
+
+void EarthWidget::setupSurfaceFormat()
+{
+    QSurfaceFormat format;
+    format.setDepthBufferSize(24);
+    format.setStencilBufferSize(8);
+    format.setVersion(3, 3);
+    format.setProfile(QSurfaceFormat::CoreProfile);
+    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
+    format.setSwapInterval(1); // Включаем вертикальную синхронизацию
+    setFormat(format);
 }
 
 void EarthWidget::initializeGL()
@@ -247,6 +265,7 @@ void EarthWidget::paintGL()
         drawTrajectories();
     }
     drawSatellitesInfo();
+    update();
 }
 
 QMatrix4x4 EarthWidget::getMVPMatrix() const
