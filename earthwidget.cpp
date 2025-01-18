@@ -56,6 +56,7 @@ void EarthWidget::initializeGL()
     initShaders();
     initTextures();
     initSphereGeometry();
+    initAxisGeometry(); // Добавьте эту строку
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
@@ -76,6 +77,11 @@ void EarthWidget::initShaders()
     lineProgram.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/line_vertex.glsl");
     lineProgram.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/line_fragment.glsl");
     lineProgram.link();
+
+    // Добавляем шейдеры для осей
+    axisProgram.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/axis_vertex.glsl");
+    axisProgram.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/axis_fragment.glsl");
+    axisProgram.link();
 }
 
 void EarthWidget::initTextures()
@@ -119,14 +125,15 @@ void EarthWidget::initTextures()
 void EarthWidget::initSphereGeometry()
 {
     const int segments = 1024;
-    const int rings = 512;
+    const int rings = 1024;
     QVector<GLfloat> vertices;
 
     // Генерация вершин сферы
     for (int ring = 0; ring <= rings; ++ring) {
         float phi = ring * M_PI / rings;
         for (int segment = 0; segment <= segments; ++segment) {
-            float theta = segment * 2.0f * M_PI / segments;
+            // Начинаем с -90 градусов (-M_PI_2)
+            float theta = -M_PI_2 + segment * 2.0f * M_PI / segments;
 
             // Позиция
             float x = sin(phi) * cos(theta);
@@ -136,9 +143,11 @@ void EarthWidget::initSphereGeometry()
             // Добавляем позицию
             vertices << x << y << z;
 
-            // Текстурные координаты - инвертируем t координату (1.0 - t)
-            vertices << (1.0f - static_cast<float>(segment) / segments)
-                     << (1.0f - static_cast<float>(ring) / rings);  // Изменено здесь
+            // Текстурные координаты (инвертируем U координату)
+            float u = 1.0f - static_cast<float>(segment) / segments; // Изменено здесь
+            float v = 1.0f - (static_cast<float>(ring) / rings);
+
+            vertices << u << v;
 
             // Нормали
             vertices << x << y << z;
@@ -225,6 +234,7 @@ void EarthWidget::paintGL()
     model.rotate(rotationAngle, 0, 1, 0);
 
     // Рисуем объекты с учетом глубины
+    drawAxis(); // Добавляем отрисовку осей
     drawEarth();
     drawSatellites();
 
@@ -579,4 +589,56 @@ int EarthWidget::getSelectedSatelliteId() const
         }
     }
     return -1;
+}
+
+void EarthWidget::initAxisGeometry()
+{
+    // Создаем массив вершин для осей (позиция и цвет)
+    const float axisLength = EARTH_RADIUS * 1.5f; // Длина осей в 1.5 раза больше радиуса Земли
+    const float vertices[] = {
+        // Позиции      // Цвета
+        0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  // X axis start (red)
+        axisLength, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  // X axis end
+
+        0.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  // Y axis start (green)
+        0.0f, axisLength, 0.0f,  0.0f, 1.0f, 0.0f,  // Y axis end
+
+        0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 1.0f,  // Z axis start (blue)
+        0.0f, 0.0f, axisLength,  0.0f, 0.0f, 1.0f   // Z axis end
+    };
+
+    axisVAO.create();
+    axisVAO.bind();
+
+    axisVBO.create();
+    axisVBO.bind();
+    axisVBO.setUsagePattern(QOpenGLBuffer::StaticDraw);
+    axisVBO.allocate(vertices, sizeof(vertices));
+
+    // Позиция
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
+    glEnableVertexAttribArray(0);
+    // Цвет
+    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
+                          reinterpret_cast<void*>(3 * sizeof(float)));
+    glEnableVertexAttribArray(1);
+
+    axisVAO.release();
+    axisVBO.release();
+}
+
+void EarthWidget::drawAxis()
+{
+    axisProgram.bind();
+
+    // Используем ту же матрицу модели, что и для Земли
+    QMatrix4x4 axisMVP = projection * view * model;
+    axisProgram.setUniformValue("mvp", axisMVP);
+
+    axisVAO.bind();
+    glLineWidth(3.0f);
+    glDrawArrays(GL_LINES, 0, 6);
+    axisVAO.release();
+
+    axisProgram.release();
 }

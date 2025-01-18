@@ -6,5 +6,7 @@
         <file>shaders/earth_vertex.glsl</file>
         <file>shaders/line_fragment.glsl</file>
         <file>shaders/line_vertex.glsl</file>
+        <file>shaders/axis_fragment.glsl</file>
+        <file>shaders/axis_vertex.glsl</file>
     </qresource>
 </RCC>

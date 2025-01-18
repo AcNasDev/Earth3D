@@ -56,6 +56,8 @@ private:
     void drawSatellitesInfo();
     void drawSatelliteInfo(QPainter& painter, const Satellite& satellite, const QPoint& screenPos);
     QMatrix4x4 getMVPMatrix() const;
+    void initAxisGeometry();
+    void drawAxis();
 
     QOpenGLShaderProgram earthProgram;
     QOpenGLShaderProgram satelliteProgram;
@@ -64,6 +66,10 @@ private:
     QOpenGLTexture* earthTexture;
     QOpenGLTexture* heightMapTexture;  // Добавляем текстуру высот
     QOpenGLTexture* normalMapTexture;  // Добавляем карту нормалей
+
+    QOpenGLShaderProgram axisProgram;
+    QOpenGLBuffer axisVBO;
+    QOpenGLVertexArrayObject axisVAO;
 
     QMatrix4x4 projection;
     QMatrix4x4 view;
