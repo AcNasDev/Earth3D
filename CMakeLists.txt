@@ -14,6 +14,17 @@ find_package(Qt${QT_VERSION_MAJOR} REQUIRED COMPONENTS Core Gui Widgets OpenGL O
 find_package(OpenGL REQUIRED)
 find_package(GLU REQUIRED)
 
+# Создаем директорию для текстур в папке сборки
+file(MAKE_DIRECTORY ${CMAKE_BINARY_DIR}/textures)
+
+# Копируем текстуры при сборке
+file(COPY
+    ${CMAKE_SOURCE_DIR}/textures/earth.jpg
+    ${CMAKE_SOURCE_DIR}/textures/earth_height.png
+    ${CMAKE_SOURCE_DIR}/textures/earth_normal.png
+    DESTINATION ${CMAKE_BINARY_DIR}/textures
+)
+
 set(PROJECT_SOURCES
         main.cpp
 

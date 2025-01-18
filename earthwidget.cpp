@@ -81,21 +81,36 @@ void EarthWidget::initShaders()
 void EarthWidget::initTextures()
 {
     QImageReader::setAllocationLimit(0);
-    // Основная текстура
-    earthTexture = new QOpenGLTexture(QImage(":/texture/earth.jpg").mirrored());
+
+    QString buildDir = QCoreApplication::applicationDirPath();
+
+    // Загружаем текстуры из папки сборки
+    QImage earthImage(buildDir + "/textures/earth.jpg");
+    if (earthImage.isNull()) {
+        qDebug() << "Failed to load earth texture";
+        return;
+    }
+    earthTexture = new QOpenGLTexture(earthImage.mirrored());
     earthTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     earthTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     earthTexture->setWrapMode(QOpenGLTexture::Repeat);
 
-    // Карта высот
-    QImage heightImage = QImage("./earth_height.png").mirrored();
-    heightMapTexture = new QOpenGLTexture(heightImage);
+    QImage heightImage(buildDir + "/textures/earth_height.png");
+    if (heightImage.isNull()) {
+        qDebug() << "Failed to load height map";
+        return;
+    }
+    heightMapTexture = new QOpenGLTexture(heightImage.mirrored());
     heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
 
-    // Карта нормалей
-    normalMapTexture = new QOpenGLTexture(QImage("./earth_normal.png").mirrored());
+    QImage normalImage(buildDir + "/textures/earth_normal.png");
+    if (normalImage.isNull()) {
+        qDebug() << "Failed to load normal map";
+        return;
+    }
+    normalMapTexture = new QOpenGLTexture(normalImage.mirrored());
     normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
