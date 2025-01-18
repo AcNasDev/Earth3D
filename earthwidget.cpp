@@ -41,8 +41,14 @@ void EarthWidget::initializeGL()
 {
     initializeOpenGLFunctions();
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    // Настройка буфера глубины
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
+
     glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);  // Отсекаем задние грани
 
     initShaders();
     initTextures();
@@ -163,7 +169,13 @@ void EarthWidget::resizeGL(int w, int h)
 
 void EarthWidget::paintGL()
 {
+    // Очищаем буфер цвета и глубины
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Включаем тест глубины
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+    glDepthMask(GL_TRUE);
 
     // Обновляем позицию камеры
     cameraPosition = QVector3D(
@@ -178,8 +190,13 @@ void EarthWidget::paintGL()
     model.setToIdentity();
     model.rotate(rotationAngle, 0, 1, 0);
 
+    // Рисуем объекты с учетом глубины
     drawEarth();
     drawSatellites();
+
+    // Отключаем тест глубины для 2D элементов
+    glDisable(GL_DEPTH_TEST);
+
     if (selectedSatelliteId != -1) {
         drawTrajectories();
     }
@@ -194,6 +211,7 @@ QMatrix4x4 EarthWidget::getMVPMatrix() const
 
 void EarthWidget::drawSatellitesInfo()
 {
+    glDisable(GL_DEPTH_TEST);
     QPainter painter(this);
     painter.beginNativePainting();
 
@@ -330,6 +348,10 @@ void EarthWidget::drawEarth()
 
 void EarthWidget::drawSatellites()
 {
+    // Включаем тест глубины
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);
+
     satelliteProgram.bind();
     sphereVAO.bind();
 
@@ -337,13 +359,10 @@ void EarthWidget::drawSatellites()
         QMatrix4x4 satMatrix = model;
         satMatrix.translate(satellite.position);
 
-        // Вычисляем расстояние от спутника до камеры
         QVector3D satelliteWorldPos = model * satellite.position;
         QVector3D toCameraVector = cameraPosition - satelliteWorldPos;
         float distanceToCamera = toCameraVector.length();
 
-        // Масштабируем размер спутника пропорционально расстоянию до камеры
-        // Множитель 0.02 определяет базовый размер спутника относительно радиуса Земли
         float scale = distanceToCamera * 0.005f;
         satMatrix.scale(scale);
 
@@ -360,6 +379,8 @@ void EarthWidget::drawSatellites()
 void EarthWidget::drawTrajectories()
 {
     if (selectedSatelliteId == -1) return;
+
+    glDisable(GL_DEPTH_TEST);
 
     const auto& satellite = satellites[selectedSatelliteId];
     if (satellite.trajectory.isEmpty()) return;
