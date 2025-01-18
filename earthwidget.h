@@ -24,8 +24,14 @@ public:
     explicit EarthWidget(QWidget *parent = nullptr);
     ~EarthWidget();
 
-    void addSatellite(int id, const QVector3D& position, const QString& info);
-    void updateSatellitePosition(int id, const QVector3D& newPosition);
+    void addSatellite(int id, const QVector3D& position, const QString& info,
+                      const QVector<QVector3D>& trajectory,
+                      const QVector<QVector3D>& futureTrajectory,
+                      float angle, float speed);
+    void updateSatellitePosition(int id, const QVector3D& newPosition,
+                                 const QVector<QVector3D>& trajectory,
+                                 const QVector<QVector3D>& futureTrajectory,
+                                 float angle);
     bool  toggleEarthAnimation();
     bool isEarthAnimating() const { return isAnimating; }
     int getSelectedSatelliteId() const;

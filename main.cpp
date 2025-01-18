@@ -45,6 +45,12 @@ int main(int argc, char *argv[])
     // Устанавливаем центральный виджет
     mainWindow.setCentralWidget(centralWidget);
 
+    // Обработчик нажатия кнопки вращения Земли
+    QObject::connect(earthRotationButton, &QPushButton::clicked, [earthWidget, earthRotationButton]() {
+        bool isAnimating = earthWidget->toggleEarthAnimation();
+        earthRotationButton->setText(isAnimating ? "Stop Earth Rotation" : "Start Earth Rotation");
+    });
+
     // Создаем спутники с разными скоростями вращения
     const float EARTH_RADIUS = 6371000.0f; // Радиус Земли в метрах
     const float ORBIT_RADIUS = EARTH_RADIUS * 1.5f;
@@ -54,6 +60,37 @@ int main(int argc, char *argv[])
         float speed;
         int id;
         QVector3D position;
+
+        // Добавляем функцию расчета траекторий
+        void calculateTrajectories(float orbitRadius, QVector<QVector3D>& trajectory, QVector<QVector3D>& futureTrajectory) {
+            // Расчет полной орбиты
+            trajectory.clear();
+            const int orbitPoints = 360; // точки для полной орбиты
+            for (int i = 0; i <= orbitPoints; ++i) {
+                float orbitAngle = i *  M_PI / orbitPoints;
+                trajectory.append(QVector3D(
+                    orbitRadius * cos(orbitAngle),
+                    0.0f,
+                    orbitRadius * sin(orbitAngle)
+                    ));
+            }
+
+            // Расчет будущей траектории
+            futureTrajectory.clear();
+            const int futurePoints = 100; // точки для будущей траектории
+            const float predictionTime = 10.0f; // время прогноза в секундах
+            float timeStep = predictionTime / futurePoints;
+
+            for (int i = 0; i <= futurePoints; ++i) {
+                float futureTime = timeStep * i;
+                float futureAngle = qDegreesToRadians(angle + speed * futureTime);
+                futureTrajectory.append(QVector3D(
+                    orbitRadius * cos(futureAngle),
+                    0.0f,
+                    orbitRadius * sin(futureAngle)
+                    ));
+            }
+        }
     };
 
     QVector<SatelliteData> satelliteData;
@@ -102,6 +139,29 @@ int main(int argc, char *argv[])
 
     // Таймер для обновления позиций спутников
     QTimer* timer = new QTimer(&mainWindow);
+    for(auto& sat : satelliteData) {
+        float radians = qDegreesToRadians(sat.angle);
+        sat.position = QVector3D(
+            ORBIT_RADIUS * cos(radians),
+            0.0f,
+            ORBIT_RADIUS * sin(radians)
+            );
+
+        QVector<QVector3D> trajectory, futureTrajectory;
+        sat.calculateTrajectories(ORBIT_RADIUS, trajectory, futureTrajectory);
+
+        earthWidget->addSatellite(
+            sat.id,
+            sat.position,
+            QString("Satellite %1 (Speed: %2°/s)").arg(sat.id).arg(sat.speed),
+            trajectory,
+            futureTrajectory,
+            sat.angle,
+            sat.speed
+            );
+    }
+
+    // В таймере обновления позиций:
     QObject::connect(timer, &QTimer::timeout, [=, &satelliteData]() mutable {
         for(auto& sat : satelliteData) {
             sat.angle += sat.speed * (16.0f / 1000.0f);
@@ -116,36 +176,23 @@ int main(int argc, char *argv[])
                 ORBIT_RADIUS * sin(radians)
                 );
 
-            earthWidget->updateSatellitePosition(sat.id, sat.position);
+            // Обновляем траектории
+            QVector<QVector3D> trajectory, futureTrajectory;
+            sat.calculateTrajectories(ORBIT_RADIUS, trajectory, futureTrajectory);
 
-            // Обновляем информацию, если этот спутник выбран
+            earthWidget->updateSatellitePosition(
+                sat.id,
+                sat.position,
+                trajectory,
+                futureTrajectory,
+                sat.angle
+                );
+
             if (earthWidget->getSelectedSatelliteId() == sat.id) {
                 emit earthWidget->satelliteSelected(sat.id);
             }
         }
     });
-
-    // Обработчик нажатия кнопки вращения Земли
-    QObject::connect(earthRotationButton, &QPushButton::clicked, [earthWidget, earthRotationButton]() {
-        bool isAnimating = earthWidget->toggleEarthAnimation();
-        earthRotationButton->setText(isAnimating ? "Stop Earth Rotation" : "Start Earth Rotation");
-    });
-
-    // Инициализируем начальные позиции спутников
-    for(auto& sat : satelliteData) {
-        float radians = qDegreesToRadians(sat.angle);
-        sat.position = QVector3D(
-            ORBIT_RADIUS * cos(radians),
-            0.0f,
-            ORBIT_RADIUS * sin(radians)
-            );
-
-        earthWidget->addSatellite(
-            sat.id,
-            sat.position,
-            QString("Satellite %1 (Speed: %2°/s)").arg(sat.id).arg(sat.speed)
-            );
-    }
 
     // Запускаем таймер
     timer->start(16);

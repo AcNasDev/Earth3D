@@ -1,8 +1,9 @@
 #version 330 core
 
-out vec4 FragColor;
+uniform vec4 color;  // Цвет линии с альфа-каналом для прозрачности
+out vec4 fragColor;
 
 void main()
 {
-    FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+    fragColor = color;
 }

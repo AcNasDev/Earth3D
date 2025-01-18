@@ -380,31 +380,57 @@ void EarthWidget::drawTrajectories()
 {
     if (selectedSatelliteId == -1) return;
 
-    glDisable(GL_DEPTH_TEST);
-
     const auto& satellite = satellites[selectedSatelliteId];
-    if (satellite.trajectory.isEmpty()) return;
 
     lineProgram.bind();
+    glEnable(GL_LINE_SMOOTH);
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    QOpenGLBuffer trajectoryVBO(QOpenGLBuffer::VertexBuffer);
-    trajectoryVBO.create();
-    trajectoryVBO.bind();
-    trajectoryVBO.allocate(satellite.trajectory.constData(),
-                           satellite.trajectory.size() * sizeof(QVector3D));
+    // Отрисовка полной орбиты (белая линия)
+    if (!satellite.trajectory.isEmpty()) {
+        QOpenGLBuffer trajectoryVBO(QOpenGLBuffer::VertexBuffer);
+        trajectoryVBO.create();
+        trajectoryVBO.bind();
+        trajectoryVBO.allocate(satellite.trajectory.constData(),
+                               satellite.trajectory.size() * sizeof(QVector3D));
 
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
-    lineProgram.setUniformValue("mvp", projection * view * model);
+        lineProgram.setUniformValue("mvp", projection * view * model);
+        lineProgram.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 0.3f)); // полупрозрачный белый
 
-    glLineWidth(2.0f);
-    glDrawArrays(GL_LINE_STRIP, 0, satellite.trajectory.size());
+        glLineWidth(1.0f);
+        glDrawArrays(GL_LINE_LOOP, 0, satellite.trajectory.size());
 
-    trajectoryVBO.release();
-    trajectoryVBO.destroy();
+        trajectoryVBO.release();
+        trajectoryVBO.destroy();
+    }
+
+    // Отрисовка будущей траектории (голубая линия)
+    if (!satellite.futureTrajectory.isEmpty()) {
+        QOpenGLBuffer futureVBO(QOpenGLBuffer::VertexBuffer);
+        futureVBO.create();
+        futureVBO.bind();
+        futureVBO.allocate(satellite.futureTrajectory.constData(),
+                           satellite.futureTrajectory.size() * sizeof(QVector3D));
+
+        glEnableVertexAttribArray(0);
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+        lineProgram.setUniformValue("mvp", projection * view * model);
+        lineProgram.setUniformValue("color", QVector4D(0.2f, 0.6f, 1.0f, 1.0f)); // яркий голубой
+
+        glLineWidth(2.0f);
+        glDrawArrays(GL_LINE_STRIP, 0, satellite.futureTrajectory.size());
+
+        futureVBO.release();
+        futureVBO.destroy();
+    }
 
     lineProgram.release();
+    glDisable(GL_LINE_SMOOTH);
 }
 
 int EarthWidget::pickSatellite(const QPoint& mousePos)
@@ -464,33 +490,33 @@ int EarthWidget::pickSatellite(const QPoint& mousePos)
     return closestSatelliteId;
 }
 
-void EarthWidget::addSatellite(int id, const QVector3D& position, const QString& info)
+void EarthWidget::addSatellite(int id, const QVector3D& position, const QString& info,
+                               const QVector<QVector3D>& trajectory,
+                               const QVector<QVector3D>& futureTrajectory,
+                               float angle, float speed)
 {
-    Satellite satellite(id, position, info);
+    Satellite satellite(id, position, info, angle, speed);
 
-    const int trajectoryPoints = 100;
-    float radius = position.length();
-    QVector3D normal = position.normalized();
-    QVector3D axis = QVector3D::crossProduct(normal, QVector3D(0, 1, 0)).normalized();
+    // Копируем траектории
+    satellite.trajectory = trajectory;
+    satellite.futureTrajectory = futureTrajectory;
 
-    for (int i = 0; i <= trajectoryPoints; ++i) {
-        float angle = i * 2.0f * M_PI / trajectoryPoints;
-        QMatrix4x4 rotation;
-        rotation.rotate(angle * 180.0f / M_PI, normal);
-        satellite.trajectory.append(rotation.map(position));
-    }
-
+    // Добавляем спутник в коллекцию
     satellites[id] = satellite;
     update();
 }
 
-void EarthWidget::updateSatellitePosition(int id, const QVector3D& newPosition)
+void EarthWidget::updateSatellitePosition(int id, const QVector3D& newPosition,
+                                          const QVector<QVector3D>& trajectory,
+                                          const QVector<QVector3D>& futureTrajectory,
+                                          float angle)
 {
-    for(auto& satellite : satellites) {
-        if(satellite.id == id) {
-            satellite.position = newPosition;
-            break;
-        }
+    auto it = satellites.find(id);
+    if (it != satellites.end()) {
+        it->position = newPosition;
+        it->angle = angle;
+        it->trajectory = trajectory;
+        it->futureTrajectory = futureTrajectory;
     }
     update(); // Запрашиваем перерисовку виджета
 }
