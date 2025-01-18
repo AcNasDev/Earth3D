@@ -1,0 +1,11 @@
+<RCC>
+    <qresource prefix="/">
+        <file>shaders/earth_fragment.glsl</file>
+        <file>shaders/sat_fragment.glsl</file>
+        <file>shaders/sat_vertex.glsl</file>
+        <file>shaders/earth_vertex.glsl</file>
+        <file>texture/earth.jpg</file>
+        <file>shaders/line_fragment.glsl</file>
+        <file>shaders/line_vertex.glsl</file>
+    </qresource>
+</RCC>
