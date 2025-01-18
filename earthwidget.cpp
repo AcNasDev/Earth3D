@@ -19,9 +19,10 @@ EarthWidget::EarthWidget(QWidget *parent)
 {
     setupSurfaceFormat();
     setFocusPolicy(Qt::StrongFocus);
-
-    // Устанавливаем политику обновления
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
+
+    // Запускаем таймер FPS
+    fpsTimer.start();
 
     animationTimer = new QTimer(this);
     connect(animationTimer, &QTimer::timeout, [this]() {
@@ -262,6 +263,7 @@ void EarthWidget::paintGL()
     // Отключаем тест глубины для 2D элементов
     glDisable(GL_DEPTH_TEST);
     drawSatellitesInfo();
+    drawFPS();
     update();
 }
 
@@ -695,3 +697,39 @@ bool EarthWidget::toggleAxisVisibility()
     return showAxis;
 }
 
+void EarthWidget::drawFPS()
+{
+    // Увеличиваем счетчик кадров
+    frameCount++;
+
+    // Проверяем, прошла ли секунда
+    float elapsed = fpsTimer.elapsed();
+    if (elapsed >= fpsUpdateInterval) {
+        currentFps = frameCount * (1000.0f / elapsed);
+        frameCount = 0;
+        fpsTimer.restart();
+    }
+
+    // Отрисовка FPS
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Настройка шрифта
+    QFont font = painter.font();
+    font.setPointSize(12);
+    font.setBold(true);
+    painter.setFont(font);
+
+    // Настройка цвета и положения текста
+    painter.setPen(Qt::green);
+
+    // Рисуем фон для текста
+    QString fpsText = QString("FPS: %1").arg(QString::number(currentFps, 'f', 1));
+    QFontMetrics fm(font);
+    QRect textRect = fm.boundingRect(fpsText);
+    textRect.adjust(-5, -5, 5, 5); // Добавляем отступы
+    textRect.moveTopLeft(QPoint(10, 10));
+
+    painter.fillRect(textRect, QColor(0, 0, 0, 128));
+    painter.drawText(textRect, Qt::AlignCenter, fpsText);
+}

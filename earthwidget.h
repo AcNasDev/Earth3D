@@ -11,6 +11,7 @@
 #include <QMatrix4x4>
 #include <QVector3D>
 #include <QMap>
+#include <QElapsedTimer>
 #include "satellite.h"
 
 class EarthWidget : public QOpenGLWidget, protected QOpenGLExtraFunctions
@@ -60,6 +61,7 @@ private:
     QMatrix4x4 getMVPMatrix() const;
     void initAxisGeometry();
     void drawAxis();
+    void drawFPS();
 
     QOpenGLShaderProgram earthProgram;
     QOpenGLShaderProgram satelliteProgram;
@@ -97,6 +99,12 @@ private:
     QTimer* animationTimer;
     float rotationAngle;
     bool showAxis = true; // Добавьте этот флаг
+
+    QElapsedTimer fpsTimer;
+    int frameCount;
+    float currentFps;
+    const float fpsUpdateInterval = 1000.0f; // Обновление FPS каждую секунду
+
     void setupSurfaceFormat();
 };
 
