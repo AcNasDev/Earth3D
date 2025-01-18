@@ -38,9 +38,16 @@ int main(int argc, char *argv[])
     infoPanelLayout->addStretch();
     mainLayout->addWidget(infoPanel, 1); // Соотношение 4:1
 
+    QHBoxLayout* buttonLayout = new QHBoxLayout();
+    layout->addLayout(buttonLayout);
+
     // Создаем кнопку для управления вращением Земли
     QPushButton* earthRotationButton = new QPushButton("Stop Earth Rotation", centralWidget);
     layout->addWidget(earthRotationButton);
+
+    // Добавляем кнопку для осей
+    QPushButton* axisToggleButton = new QPushButton("Hide Axes", centralWidget);
+    buttonLayout->addWidget(axisToggleButton);
 
     // Устанавливаем центральный виджет
     mainWindow.setCentralWidget(centralWidget);
@@ -49,6 +56,10 @@ int main(int argc, char *argv[])
     QObject::connect(earthRotationButton, &QPushButton::clicked, [earthWidget, earthRotationButton]() {
         bool isAnimating = earthWidget->toggleEarthAnimation();
         earthRotationButton->setText(isAnimating ? "Stop Earth Rotation" : "Start Earth Rotation");
+    });
+    QObject::connect(axisToggleButton, &QPushButton::clicked, [earthWidget, axisToggleButton]() {
+        bool isVisible = earthWidget->toggleAxisVisibility();
+        axisToggleButton->setText(isVisible ? "Hide Axes" : "Show Axes");
     });
 
     // Создаем спутники с разными скоростями вращения

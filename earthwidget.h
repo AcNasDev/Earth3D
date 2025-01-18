@@ -35,6 +35,8 @@ public:
     bool  toggleEarthAnimation();
     bool isEarthAnimating() const { return isAnimating; }
     int getSelectedSatelliteId() const;
+    bool toggleAxisVisibility(); // Добавить этот метод
+    bool isAxisVisible() const { return showAxis; }
 signals:
     void satelliteSelected(int id);
 protected:
@@ -93,6 +95,7 @@ private:
 
     QTimer* animationTimer;
     float rotationAngle;
+    bool showAxis = true; // Добавьте этот флаг
 };
 
 #endif // EARTHWIDGET_H

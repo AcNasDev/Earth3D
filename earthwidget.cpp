@@ -37,6 +37,8 @@ EarthWidget::~EarthWidget()
     delete normalMapTexture;
     sphereVBO.destroy();
     sphereVAO.destroy();
+    axisVBO.destroy();
+    axisVAO.destroy();
     doneCurrent();
 }
 
@@ -629,6 +631,7 @@ void EarthWidget::initAxisGeometry()
 
 void EarthWidget::drawAxis()
 {
+    if (!showAxis) return;
     axisProgram.bind();
 
     // Используем ту же матрицу модели, что и для Земли
@@ -642,3 +645,11 @@ void EarthWidget::drawAxis()
 
     axisProgram.release();
 }
+
+bool EarthWidget::toggleAxisVisibility()
+{
+    showAxis = !showAxis;
+    update();
+    return showAxis;
+}
+
