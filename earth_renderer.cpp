@@ -2,29 +2,39 @@
 #include <QImage>
 #include <QtMath>
 #include <QCoreApplication>
+#include <QImageReader>
 
 EarthRenderer::EarthRenderer(float radius)
     : Renderer()
-    , earthTexture(nullptr)
-    , heightMapTexture(nullptr)
-    , normalMapTexture(nullptr)
+    , earthTexture(nullptr)        // Добавить эту инициализацию
+    , heightMapTexture(nullptr)    // Добавить эту инициализацию
+    , normalMapTexture(nullptr)    // Добавить эту инициализацию
     , indexBuffer(QOpenGLBuffer::IndexBuffer)
     , radius(radius)
     , vertexCount(0)
+    , displacementScale(0.05f)
 {
 }
 
 EarthRenderer::~EarthRenderer()
 {
-    delete earthTexture;
-    delete heightMapTexture;
-    delete normalMapTexture;
+    if (earthTexture)
+        delete earthTexture;
+    if (heightMapTexture)
+        delete heightMapTexture;
+    if (normalMapTexture)
+        delete normalMapTexture;
     if (indexBuffer.isCreated())
         indexBuffer.destroy();
 }
 
 void EarthRenderer::initialize()
 {
+    if (!init()) {  // Вызов базового метода для инициализации OpenGL функций
+        qDebug() << "Failed to initialize OpenGL functions for EarthRenderer";
+        return;
+    }
+
     initShaders();
     initTextures();
     initGeometry();
@@ -44,33 +54,52 @@ void EarthRenderer::initShaders()
 
 void EarthRenderer::initTextures()
 {
+    QImageReader::setAllocationLimit(0);
     QString buildDir = QCoreApplication::applicationDirPath();
 
     // Загрузка текстуры Земли
     QImage earthImage(buildDir + "/textures/earth.jpg");
     if (!earthImage.isNull()) {
         earthTexture = new QOpenGLTexture(earthImage.mirrored());
-        earthTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-        earthTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-        earthTexture->setWrapMode(QOpenGLTexture::Repeat);
+        if (!earthTexture->isCreated()) {
+            delete earthTexture;
+            earthTexture = nullptr;
+            qDebug() << "Failed to create earth texture";
+        } else {
+            earthTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+            earthTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+            earthTexture->setWrapMode(QOpenGLTexture::Repeat);
+        }
     }
 
     // Загрузка карты высот
     QImage heightImage(buildDir + "/textures/earth_height.png");
     if (!heightImage.isNull()) {
         heightMapTexture = new QOpenGLTexture(heightImage.mirrored());
-        heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-        heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-        heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
+        if (!heightMapTexture->isCreated()) {
+            delete heightMapTexture;
+            heightMapTexture = nullptr;
+            qDebug() << "Failed to create height map texture";
+        } else {
+            heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+            heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+            heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
+        }
     }
 
     // Загрузка карты нормалей
     QImage normalImage(buildDir + "/textures/earth_normal.png");
     if (!normalImage.isNull()) {
         normalMapTexture = new QOpenGLTexture(normalImage.mirrored());
-        normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-        normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-        normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
+        if (!normalMapTexture->isCreated()) {
+            delete normalMapTexture;
+            normalMapTexture = nullptr;
+            qDebug() << "Failed to create normal map texture";
+        } else {
+            normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+            normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+            normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
+        }
     }
 }
 
@@ -164,6 +193,7 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("model", earthMatrix);
     program.setUniformValue("normalMatrix", earthMatrix.normalMatrix());
     program.setUniformValue("viewPos", view.inverted().column(3).toVector3D());
+    program.setUniformValue("displacementScale", displacementScale);
 
     // Привязываем текстуры
     if (earthTexture) {

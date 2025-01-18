@@ -3,7 +3,6 @@
 Renderer::Renderer()
     : vbo(QOpenGLBuffer::VertexBuffer)
 {
-    initializeOpenGLFunctions();
 }
 
 Renderer::~Renderer()
@@ -17,4 +16,10 @@ Renderer::~Renderer()
 void Renderer::initializeOpenGLFunctions()
 {
     QOpenGLExtraFunctions::initializeOpenGLFunctions();
+}
+
+bool Renderer::init()
+{
+    initializeOpenGLFunctions();
+    return true;
 }

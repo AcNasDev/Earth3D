@@ -44,19 +44,31 @@ EarthWidget::~EarthWidget()
 
 void EarthWidget::setupSurfaceFormat()
 {
+    // Установка формата OpenGL
     QSurfaceFormat format;
+    format.setVersion(3, 3);  // Используем OpenGL 3.3
+    format.setProfile(QSurfaceFormat::CoreProfile);
     format.setDepthBufferSize(24);
     format.setStencilBufferSize(8);
-    format.setSamples(4);
-    format.setVersion(3, 3);
-    format.setProfile(QSurfaceFormat::CoreProfile);
-    format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
-    format.setSwapInterval(1);
+    format.setSamples(4); // Мультисэмплинг
     setFormat(format);
+    QSurfaceFormat::setDefaultFormat(format);
 }
 
 void EarthWidget::initializeGL()
 {
+    // Убедитесь, что контекст OpenGL активен
+    makeCurrent();
+
+    // Инициализируем базовые функции OpenGL для каждого рендерера
+    if (!earthRenderer->init() ||
+        !satelliteRenderer->init() ||
+        !trajectoryRenderer->init()) {
+        qDebug() << "Failed to initialize OpenGL functions for renderers";
+        return;
+    }
+
+    // Теперь можно инициализировать рендереры
     earthRenderer->initialize();
     satelliteRenderer->initialize();
     trajectoryRenderer->initialize();

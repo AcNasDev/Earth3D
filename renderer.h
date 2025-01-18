@@ -13,11 +13,13 @@ public:
     Renderer();
     virtual ~Renderer();
 
+    virtual bool init();  // Новый метод для инициализации
     virtual void initialize() = 0;
     virtual void render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model) = 0;
 
 protected:
     void initializeOpenGLFunctions();
+
     QOpenGLShaderProgram program;
     QOpenGLVertexArrayObject vao;
     QOpenGLBuffer vbo;

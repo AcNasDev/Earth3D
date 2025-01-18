@@ -26,9 +26,10 @@ private:
     QOpenGLTexture* normalMapTexture;
     QOpenGLBuffer indexBuffer;
 
+    float displacementScale;  // Добавьте это поле
     float radius;
     int vertexCount;
-    static constexpr int RINGS = 128;
-    static constexpr int SEGMENTS = 128;
+    static constexpr int RINGS = 1024;
+    static constexpr int SEGMENTS = 1024;
 };
 #endif // EARTH_RENDERER_H
