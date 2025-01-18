@@ -67,10 +67,10 @@ int main(int argc, char *argv[])
         bool isAnimating = earthWidget->toggleEarthAnimation();
         earthRotationButton->setText(isAnimating ? "Stop Earth Rotation" : "Start Earth Rotation");
     });
-    QObject::connect(axisToggleButton, &QPushButton::clicked, [earthWidget, axisToggleButton]() {
-        bool isVisible = earthWidget->toggleAxisVisibility();
-        axisToggleButton->setText(isVisible ? "Hide Axes" : "Show Axes");
-    });
+    // QObject::connect(axisToggleButton, &QPushButton::clicked, [earthWidget, axisToggleButton]() {
+    //     bool isVisible = earthWidget->toggleAxisVisibility();
+    //     axisToggleButton->setText(isVisible ? "Hide Axes" : "Show Axes");
+    // });
 
     // Создаем спутники с разными скоростями вращения
     const float EARTH_RADIUS = 6371000.0f; // Радиус Земли в метрах
@@ -212,11 +212,7 @@ int main(int argc, char *argv[])
         earthWidget->addSatellite(
             sat.id,
             sat.position,
-            QString("Satellite %1 (Speed: %2°/s)").arg(sat.id).arg(sat.speed),
-            trajectory,
-            futureTrajectory,
-            sat.angle,
-            sat.speed
+            QString("Satellite %1 (Speed: %2°/s)").arg(sat.id).arg(sat.speed)
             );
     }
 

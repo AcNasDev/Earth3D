@@ -40,6 +40,13 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         MANUAL_FINALIZATION
         ${PROJECT_SOURCES}
         satellite.h
+        camera.h camera.cpp
+        renderer.h
+        fps_renderer.h fps_renderer.cpp
+        earth_renderer.h earth_renderer.cpp
+        satellite_renderer.h satellite_renderer.cpp
+        trajectory_renderer.h trajectory_renderer.cpp
+        renderer.cpp
 
     )
 # Define target properties for Android with Qt 6 as:

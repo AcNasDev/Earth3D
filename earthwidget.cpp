@@ -1,17 +1,13 @@
+// earthwidget.cpp
 #include "earthwidget.h"
 #include <QMouseEvent>
 #include <QTimer>
-#include <cmath>
 #include <QPainter>
-#include <QDateTime>
-#include <QImageReader>
+#include <QtMath>
 
 EarthWidget::EarthWidget(QWidget *parent)
     : QOpenGLWidget(parent)
-    , earthTexture(nullptr)
-    , cameraTheta(0.0f)
-    , cameraPhi(M_PI_2)
-    , cameraZoom(EARTH_RADIUS * 3.0f)  // Устанавливаем начальное расстояние камеры
+    , camera(EARTH_RADIUS)
     , isMousePressed(false)
     , isAnimating(true)
     , selectedSatelliteId(-1)
@@ -21,8 +17,10 @@ EarthWidget::EarthWidget(QWidget *parent)
     setFocusPolicy(Qt::StrongFocus);
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);
 
-    // Запускаем таймер FPS
-    fpsTimer.start();
+    earthRenderer = new EarthRenderer(EARTH_RADIUS);
+    satelliteRenderer = new SatelliteRenderer();
+    trajectoryRenderer = new TrajectoryRenderer();
+    fpsRenderer = new FPSRenderer();
 
     animationTimer = new QTimer(this);
     connect(animationTimer, &QTimer::timeout, [this]() {
@@ -37,13 +35,10 @@ EarthWidget::EarthWidget(QWidget *parent)
 EarthWidget::~EarthWidget()
 {
     makeCurrent();
-    delete earthTexture;
-    delete heightMapTexture;
-    delete normalMapTexture;
-    sphereVBO.destroy();
-    sphereVAO.destroy();
-    axisVBO.destroy();
-    axisVAO.destroy();
+    delete earthRenderer;
+    delete satelliteRenderer;
+    delete trajectoryRenderer;
+    delete fpsRenderer;
     doneCurrent();
 }
 
@@ -52,177 +47,26 @@ void EarthWidget::setupSurfaceFormat()
     QSurfaceFormat format;
     format.setDepthBufferSize(24);
     format.setStencilBufferSize(8);
-    format.setSamples(4); // Включаем MSAA (Multisample Anti-Aliasing)
+    format.setSamples(4);
     format.setVersion(3, 3);
     format.setProfile(QSurfaceFormat::CoreProfile);
     format.setSwapBehavior(QSurfaceFormat::DoubleBuffer);
-    format.setSwapInterval(1); // Включаем V-Sync
+    format.setSwapInterval(1);
     setFormat(format);
 }
 
 void EarthWidget::initializeGL()
 {
-    initializeOpenGLFunctions();
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    earthRenderer->initialize();
+    satelliteRenderer->initialize();
+    trajectoryRenderer->initialize();
 
-    // Включаем все необходимые возможности OpenGL
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    // Настройки качества
-    glHint(GL_PERSPECTIVE_CORRECTION_HINT, GL_NICEST);
-    glHint(GL_LINE_SMOOTH_HINT, GL_NICEST);
-    glHint(GL_POLYGON_SMOOTH_HINT, GL_NICEST);
-
-    initShaders();
-    initTextures();
-    initSphereGeometry();
-    initAxisGeometry(); // Добавьте эту строку
-}
-
-void EarthWidget::initShaders()
-{
-    // Earth shader
-    earthProgram.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/earth_vertex.glsl");
-    earthProgram.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/earth_fragment.glsl");
-    earthProgram.link();
-
-    // Satellite shader
-    satelliteProgram.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/sat_vertex.glsl");
-    satelliteProgram.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/sat_fragment.glsl");
-    satelliteProgram.link();
-
-    // Line shader
-    lineProgram.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/line_vertex.glsl");
-    lineProgram.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/line_fragment.glsl");
-    lineProgram.link();
-
-    // Добавляем шейдеры для осей
-    axisProgram.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/axis_vertex.glsl");
-    axisProgram.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/axis_fragment.glsl");
-    axisProgram.link();
-}
-
-void EarthWidget::initTextures()
-{
-    QImageReader::setAllocationLimit(0);
-
-    QString buildDir = QCoreApplication::applicationDirPath();
-
-    // Загружаем текстуры из папки сборки
-    QImage earthImage(buildDir + "/textures/earth.jpg");
-    if (earthImage.isNull()) {
-        qDebug() << "Failed to load earth texture";
-        return;
-    }
-    earthTexture = new QOpenGLTexture(earthImage.mirrored());
-    earthTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-    earthTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-    earthTexture->setWrapMode(QOpenGLTexture::Repeat);
-
-    QImage heightImage(buildDir + "/textures/earth_height.png");
-    if (heightImage.isNull()) {
-        qDebug() << "Failed to load height map";
-        return;
-    }
-    heightMapTexture = new QOpenGLTexture(heightImage.mirrored());
-    heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-    heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-    heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
-
-    QImage normalImage(buildDir + "/textures/earth_normal.png");
-    if (normalImage.isNull()) {
-        qDebug() << "Failed to load normal map";
-        return;
-    }
-    normalMapTexture = new QOpenGLTexture(normalImage.mirrored());
-    normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-    normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-    normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
-}
-
-void EarthWidget::initSphereGeometry()
-{
-    const int segments = 1024;
-    const int rings = 1024;
-    QVector<GLfloat> vertices;
-
-    // Генерация вершин сферы
-    for (int ring = 0; ring <= rings; ++ring) {
-        float phi = ring * M_PI / rings;
-        for (int segment = 0; segment <= segments; ++segment) {
-            // Начинаем с -90 градусов (-M_PI_2)
-            float theta = -M_PI_2 + segment * 2.0f * M_PI / segments;
-
-            // Позиция
-            float x = sin(phi) * cos(theta);
-            float y = cos(phi);
-            float z = sin(phi) * sin(theta);
-
-            // Добавляем позицию
-            vertices << x << y << z;
-
-            // Текстурные координаты (инвертируем U координату)
-            float u = 1.0f - static_cast<float>(segment) / segments; // Изменено здесь
-            float v = 1.0f - (static_cast<float>(ring) / rings);
-
-            vertices << u << v;
-
-            // Нормали
-            vertices << x << y << z;
-        }
-    }
-
-    // Генерация индексов
-    QVector<GLuint> indices;
-    for (int ring = 0; ring < rings; ++ring) {
-        for (int segment = 0; segment < segments; ++segment) {
-            GLuint first = ring * (segments + 1) + segment;
-            GLuint second = first + segments + 1;
-
-            indices << first << first + 1 << second;
-            indices << second << first + 1 << second + 1;
-        }
-    }
-
-    sphereVertexCount = indices.size();
-
-    // Создаем и настраиваем VAO
-    sphereVAO.create();
-    sphereVAO.bind();
-
-    // Создаем и заполняем VBO для вершин
-    sphereVBO.create();
-    sphereVBO.bind();
-    sphereVBO.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    sphereVBO.allocate(vertices.constData(), vertices.size() * sizeof(GLfloat));
-
-    // Создаем и заполняем индексный буфер
-    QOpenGLBuffer indexBuffer(QOpenGLBuffer::IndexBuffer);
-    indexBuffer.create();
-    indexBuffer.bind();
-    indexBuffer.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    indexBuffer.allocate(indices.constData(), indices.size() * sizeof(GLuint));
-
-    // Настраиваем атрибуты вершин
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), nullptr);
-    glEnableVertexAttribArray(0);
-
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(3 * sizeof(GLfloat)));
-    glEnableVertexAttribArray(1);
-
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(5 * sizeof(GLfloat)));
-    glEnableVertexAttribArray(2);
-
-    // Освобождаем буферы
-    sphereVAO.release();
-    sphereVBO.release();
-    indexBuffer.release();
 }
 
 void EarthWidget::resizeGL(int w, int h)
@@ -234,121 +78,29 @@ void EarthWidget::resizeGL(int w, int h)
 
 void EarthWidget::paintGL()
 {
-    // Очищаем буфер цвета и глубины
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    // Включаем тест глубины
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-    glDepthMask(GL_TRUE);
-
-    // Обновляем позицию камеры
-    cameraPosition = QVector3D(
-        cameraZoom * sin(cameraPhi) * cos(cameraTheta),
-        cameraZoom * cos(cameraPhi),
-        cameraZoom * sin(cameraPhi) * sin(cameraTheta)
-        );
-
-    view.setToIdentity();
-    view.lookAt(cameraPosition, QVector3D(0, 0, 0), QVector3D(0, 1, 0));
 
     model.setToIdentity();
     model.rotate(rotationAngle, 0, 1, 0);
 
-    // Рисуем объекты с учетом глубины
-    drawAxis(); // Добавляем отрисовку осей
-    drawEarth();
-    drawTrajectories();
-    drawSatellites();   
-    // Отключаем тест глубины для 2D элементов
-    glDisable(GL_DEPTH_TEST);
-    drawSatellitesInfo();
-    drawFPS();
-    update();
-}
+    QMatrix4x4 viewMatrix = camera.getViewMatrix();
 
-QMatrix4x4 EarthWidget::getMVPMatrix() const
-{
-    QMatrix4x4 mvp = projection * view * model;
-    return mvp;
-}
+    // 3D Rendering
+    earthRenderer->render(projection, viewMatrix, model);
 
-void EarthWidget::drawSatellitesInfo()
-{
-    glDisable(GL_DEPTH_TEST);
+    if (selectedSatelliteId != -1) {
+        trajectoryRenderer->render(projection, viewMatrix, model);
+    }
+
+    satelliteRenderer->render(projection, viewMatrix, model);
+
+    // 2D Overlay
     QPainter painter(this);
-    painter.beginNativePainting();
-
-    for (const auto& satellite : satellites) {
-        if (satellite.isSelected) {
-            // Получаем экранные координаты для позиции спутника
-            QVector4D clipSpace = getMVPMatrix() * QVector4D(satellite.position, 1.0f);
-            QVector3D ndc = QVector3D(clipSpace.x(), clipSpace.y(), clipSpace.z()) / clipSpace.w();
-            QPoint screenPos(
-                (ndc.x() + 1.0f) * width() / 2.0f,
-                (1.0f - ndc.y()) * height() / 2.0f
-                );
-
-            painter.end();
-            painter.begin(this);
-
-            drawSatelliteInfo(painter, satellite, screenPos);
-
-            painter.end();
-            painter.begin(this);
-            painter.beginNativePainting();
-            break;
-        }
-    }
-
+    fpsRenderer->render(painter, size());
     painter.end();
-}
 
-void EarthWidget::drawSatelliteInfo(QPainter& painter, const Satellite& satellite, const QPoint& screenPos)
-{
-    // Настраиваем шрифт
-    QFont font = painter.font();
-    font.setPointSize(10);
-    painter.setFont(font);
-    QFontMetrics fm(font);
-
-    // Форматируем информацию о спутнике
-    QString info = QString(
-                       "ID: %1\n"
-                       "Speed: %2°/s\n"
-                       "Pos: X:%3.2f Y:%4.2f Z:%5.2f"
-                       )
-                       .arg(satellite.id)
-                       .arg(satellite.info.split("Speed: ")[1].split("°")[0])
-                       .arg(satellite.position.x())
-                       .arg(satellite.position.y())
-                       .arg(satellite.position.z());
-
-    // Вычисляем размеры текстового блока
-    QStringList lines = info.split('\n');
-    int maxWidth = 0;
-    int totalHeight = 0;
-    for (const QString& line : lines) {
-        maxWidth = qMax(maxWidth, fm.horizontalAdvance(line));
-        totalHeight += fm.height();
-    }
-
-    // Рисуем полупрозрачный фон
-    QRect bgRect(
-        screenPos.x(),
-        screenPos.y() - totalHeight/2,
-        maxWidth + 20,
-        totalHeight + 10
-        );
-    painter.fillRect(bgRect, QColor(0, 0, 0, 128));
-
-    // Рисуем текст
-    painter.setPen(Qt::white);
-    int y = screenPos.y() - totalHeight/2 + 5;
-    for (const QString& line : lines) {
-        painter.drawText(screenPos.x() + 10, y + fm.height(), line);
-        y += fm.height();
-    }
+    // Update FPS counter
+    fpsRenderer->update();
 }
 
 void EarthWidget::mousePressEvent(QMouseEvent *event)
@@ -366,6 +118,7 @@ void EarthWidget::mousePressEvent(QMouseEvent *event)
             if (selectedSatelliteId != -1) {
                 satellites[selectedSatelliteId].isSelected = true;
             }
+            satelliteRenderer->updateSatellites(satellites);
             update();
         }
     }
@@ -375,8 +128,7 @@ void EarthWidget::mouseMoveEvent(QMouseEvent *event)
 {
     if (isMousePressed) {
         QPoint delta = event->pos() - lastMousePos;
-        cameraTheta -= delta.x() * 0.01f;
-        cameraPhi = qBound(0.1f, cameraPhi - delta.y() * 0.01f, float(M_PI - 0.1f));
+        camera.rotate(delta.x() * 0.01f, delta.y() * 0.01f);
         lastMousePos = event->pos();
         update();
     }
@@ -385,224 +137,15 @@ void EarthWidget::mouseMoveEvent(QMouseEvent *event)
 void EarthWidget::wheelEvent(QWheelEvent *event)
 {
     float zoomFactor = event->angleDelta().y() > 0 ? 0.9f : 1.1f;
-    cameraZoom = qBound(EARTH_RADIUS * 1.5f, cameraZoom * zoomFactor, EARTH_RADIUS * 10.0f);
+    camera.zoom(zoomFactor);
     update();
 }
 
-void EarthWidget::drawEarth()
+void EarthWidget::addSatellite(int id, const QVector3D& position, const QString& info)
 {
-    earthProgram.bind();
-
-    QMatrix4x4 earthMatrix = model;
-    earthMatrix.scale(EARTH_RADIUS);
-
-    earthProgram.setUniformValue("mvp", projection * view * earthMatrix);
-    earthProgram.setUniformValue("model", earthMatrix);
-    earthProgram.setUniformValue("viewPos", cameraPosition);
-
-    // Устанавливаем масштаб смещения (можно настраивать)
-    earthProgram.setUniformValue("displacementScale", 0.05f);
-
-    // Привязываем текстуры
-    earthTexture->bind(0);
-    heightMapTexture->bind(1);
-    normalMapTexture->bind(2);
-
-    earthProgram.setUniformValue("earthTexture", 0);
-    earthProgram.setUniformValue("heightMap", 1);
-    earthProgram.setUniformValue("normalMap", 2);
-
-    sphereVAO.bind();
-    glDrawElements(GL_TRIANGLES, sphereVertexCount, GL_UNSIGNED_INT, 0);
-    sphereVAO.release();
-
-    earthProgram.release();
-}
-
-void EarthWidget::drawSatellites()
-{
-    satelliteProgram.bind();
-
-    // Включаем сглаживание
-    glEnable(GL_MULTISAMPLE);
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-    sphereVAO.bind();
-
-    for (const auto& satellite : satellites) {
-        QMatrix4x4 satMatrix = model;
-        satMatrix.translate(satellite.position);
-
-        QVector3D satelliteWorldPos = model * satellite.position;
-        QVector3D toCameraVector = cameraPosition - satelliteWorldPos;
-        float distanceToCamera = toCameraVector.length();
-
-        float scale = distanceToCamera * 0.005f;
-        satMatrix.scale(scale);
-
-        satelliteProgram.setUniformValue("mvp", projection * view * satMatrix);
-        satelliteProgram.setUniformValue("isSelected", satellite.isSelected);
-        satelliteProgram.setUniformValue("viewPos", cameraPosition);
-
-        glDrawElements(GL_TRIANGLES, sphereVertexCount, GL_UNSIGNED_INT, 0);
-    }
-
-    sphereVAO.release();
-    satelliteProgram.release();
-
-    // Восстанавливаем настройки
-    glDisable(GL_BLEND);
-}
-void EarthWidget::drawTrajectories()
-{
-    if (selectedSatelliteId == -1) return;
-
-    const auto& satellite = satellites[selectedSatelliteId];
-    if (satellite.trajectory.isEmpty() && satellite.futureTrajectory.isEmpty()) return;
-
-    GLint previousDepthFunc;
-    glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunc);
-
-    lineProgram.bind();
-
-    glEnable(GL_BLEND);
-    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glEnable(GL_LINE_SMOOTH);
-    glDepthFunc(GL_ALWAYS);
-
-    // Создаем VAO, если еще не создан
-    if (!trajectoryVAO.isCreated()) {
-        trajectoryVAO.create();
-    }
-    trajectoryVAO.bind();
-
-    // Рисуем текущую траекторию пунктиром
-    if (!satellite.trajectory.isEmpty()) {
-        QVector<QVector3D> dashedLine;
-        // Создаем пунктирную линию из исходной траектории
-        for (int i = 0; i < satellite.trajectory.size() - 1; i += 2) {
-            dashedLine.append(satellite.trajectory[i]);
-            if (i + 1 < satellite.trajectory.size()) {
-                dashedLine.append(satellite.trajectory[i + 1]);
-            }
-        }
-
-        QOpenGLBuffer vbo(QOpenGLBuffer::VertexBuffer);
-        vbo.create();
-        vbo.bind();
-        vbo.allocate(dashedLine.constData(), dashedLine.size() * sizeof(QVector3D));
-
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(QVector3D), nullptr);
-
-        lineProgram.setUniformValue("mvp", projection * view * model);
-        lineProgram.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 1.0f));
-
-        glLineWidth(2.0f);
-        glDrawArrays(GL_LINES, 0, dashedLine.size());
-
-        vbo.release();
-        vbo.destroy();
-    }
-
-    // Рисуем предсказанную траекторию сплошной линией
-    if (!satellite.futureTrajectory.isEmpty()) {
-        QOpenGLBuffer vbo(QOpenGLBuffer::VertexBuffer);
-        vbo.create();
-        vbo.bind();
-        vbo.allocate(satellite.futureTrajectory.constData(),
-                     satellite.futureTrajectory.size() * sizeof(QVector3D));
-
-        glEnableVertexAttribArray(0);
-        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(QVector3D), nullptr);
-
-        lineProgram.setUniformValue("mvp", projection * view * model);
-        lineProgram.setUniformValue("color", QVector4D(0.0f, 1.0f, 1.0f, 0.8f));
-
-        glLineWidth(2.0f);
-        glDrawArrays(GL_LINE_STRIP, 0, satellite.futureTrajectory.size());
-
-        vbo.release();
-        vbo.destroy();
-    }
-
-    trajectoryVAO.release();
-    lineProgram.release();
-
-    glDepthFunc(previousDepthFunc);
-}
-
-int EarthWidget::pickSatellite(const QPoint& mousePos)
-{
-    // Преобразуем координаты мыши в нормализованные координаты устройства (-1 до 1)
-    float x = (2.0f * mousePos.x()) / width() - 1.0f;
-    float y = 1.0f - (2.0f * mousePos.y()) / height();
-
-    // Создаем луч в пространстве камеры
-    QVector4D rayClip(x, y, -1.0f, 1.0f);
-
-    // Преобразуем в пространство глаза
-    QVector4D rayEye = projection.inverted() * rayClip;
-    rayEye.setZ(-1.0f);
-    rayEye.setW(0.0f);
-
-    // Преобразуем в мировое пространство
-    QVector4D rayWorld4 = view.inverted() * rayEye;
-    QVector3D rayWorld(rayWorld4.x(), rayWorld4.y(), rayWorld4.z());
-    rayWorld.normalize();
-
-    // Начальная позиция луча (позиция камеры)
-    QVector3D rayOrigin = cameraPosition;
-
-    // Находим ближайший спутник
-    float minDistance = std::numeric_limits<float>::max();
-    int closestSatelliteId = -1;
-    float pickRadius = EARTH_RADIUS * 0.1f; // Радиус для определения попадания
-
-    for (const auto& satellite : satellites) {
-        // Получаем позицию спутника в мировых координатах
-        QVector3D satPos = model * satellite.position;
-
-        // Вектор от начала луча до спутника
-        QVector3D toSatellite = satPos - rayOrigin;
-
-        // Проекция вектора toSatellite на направление луча
-        float projection = QVector3D::dotProduct(toSatellite, rayWorld);
-
-        // Если спутник находится позади камеры, пропускаем его
-        if (projection < 0) continue;
-
-        // Находим ближайшую точку на луче к спутнику
-        QVector3D projectionPoint = rayOrigin + rayWorld * projection;
-
-        // Расстояние от спутника до луча
-        float distance = (satPos - projectionPoint).length();
-
-        // Если расстояние меньше порога и это ближайший спутник
-        if (distance < pickRadius && projection < minDistance) {
-            minDistance = projection;
-            closestSatelliteId = satellite.id;
-        }
-    }
-
-    emit satelliteSelected(closestSatelliteId);
-    return closestSatelliteId;
-}
-
-void EarthWidget::addSatellite(int id, const QVector3D& position, const QString& info,
-                               const QVector<QVector3D>& trajectory,
-                               const QVector<QVector3D>& futureTrajectory,
-                               float angle, float speed)
-{
-    Satellite satellite(id, position, info, angle, speed);
-
-    // Копируем траектории
-    satellite.trajectory = trajectory;
-    satellite.futureTrajectory = futureTrajectory;
-
-    // Добавляем спутник в коллекцию
+    Satellite satellite(id, position, info);
     satellites[id] = satellite;
+    satelliteRenderer->updateSatellites(satellites);
     update();
 }
 
@@ -615,10 +158,14 @@ void EarthWidget::updateSatellitePosition(int id, const QVector3D& newPosition,
     if (it != satellites.end()) {
         it->position = newPosition;
         it->angle = angle;
-        it->trajectory = trajectory;
-        it->futureTrajectory = futureTrajectory;
+
+        if (id == selectedSatelliteId) {
+            trajectoryRenderer->setTrajectories(trajectory, futureTrajectory);
+        }
+
+        satelliteRenderer->updateSatellites(satellites);
     }
-    update(); // Запрашиваем перерисовку виджета
+    update();
 }
 
 bool EarthWidget::toggleEarthAnimation()
@@ -627,109 +174,41 @@ bool EarthWidget::toggleEarthAnimation()
     return isAnimating;
 }
 
-int EarthWidget::getSelectedSatelliteId() const
+int EarthWidget::pickSatellite(const QPoint& mousePos)
 {
+    float x = (2.0f * mousePos.x()) / width() - 1.0f;
+    float y = 1.0f - (2.0f * mousePos.y()) / height();
+
+    QVector4D rayClip(x, y, -1.0f, 1.0f);
+    QVector4D rayEye = projection.inverted() * rayClip;
+    rayEye.setZ(-1.0f);
+    rayEye.setW(0.0f);
+
+    QVector4D rayWorld4 = camera.getViewMatrix().inverted() * rayEye;
+    QVector3D rayWorld(rayWorld4.x(), rayWorld4.y(), rayWorld4.z());
+    rayWorld.normalize();
+
+    QVector3D rayOrigin = camera.getPosition();
+    float minDistance = std::numeric_limits<float>::max();
+    int closestSatelliteId = -1;
+    float pickRadius = EARTH_RADIUS * 0.1f;
+
     for (const auto& satellite : satellites) {
-        if (satellite.isSelected) {
-            return satellite.id;
+        QVector3D satPos = model * satellite.position;
+        QVector3D toSatellite = satPos - rayOrigin;
+        float projection = QVector3D::dotProduct(toSatellite, rayWorld);
+
+        if (projection < 0) continue;
+
+        QVector3D projectionPoint = rayOrigin + rayWorld * projection;
+        float distance = (satPos - projectionPoint).length();
+
+        if (distance < pickRadius && projection < minDistance) {
+            minDistance = projection;
+            closestSatelliteId = satellite.id;
         }
     }
-    return -1;
-}
 
-void EarthWidget::initAxisGeometry()
-{
-    // Создаем массив вершин для осей (позиция и цвет)
-    const float axisLength = EARTH_RADIUS * 1.5f; // Длина осей в 1.5 раза больше радиуса Земли
-    const float vertices[] = {
-        // Позиции      // Цвета
-        0.0f, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  // X axis start (red)
-        axisLength, 0.0f, 0.0f,  1.0f, 0.0f, 0.0f,  // X axis end
-
-        0.0f, 0.0f, 0.0f,  0.0f, 1.0f, 0.0f,  // Y axis start (green)
-        0.0f, axisLength, 0.0f,  0.0f, 1.0f, 0.0f,  // Y axis end
-
-        0.0f, 0.0f, 0.0f,  0.0f, 0.0f, 1.0f,  // Z axis start (blue)
-        0.0f, 0.0f, axisLength,  0.0f, 0.0f, 1.0f   // Z axis end
-    };
-
-    axisVAO.create();
-    axisVAO.bind();
-
-    axisVBO.create();
-    axisVBO.bind();
-    axisVBO.setUsagePattern(QOpenGLBuffer::StaticDraw);
-    axisVBO.allocate(vertices, sizeof(vertices));
-
-    // Позиция
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), nullptr);
-    glEnableVertexAttribArray(0);
-    // Цвет
-    glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float),
-                          reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(1);
-
-    axisVAO.release();
-    axisVBO.release();
-}
-
-void EarthWidget::drawAxis()
-{
-    if (!showAxis) return;
-    axisProgram.bind();
-
-    // Используем ту же матрицу модели, что и для Земли
-    QMatrix4x4 axisMVP = projection * view * model;
-    axisProgram.setUniformValue("mvp", axisMVP);
-
-    axisVAO.bind();
-    glLineWidth(3.0f);
-    glDrawArrays(GL_LINES, 0, 6);
-    axisVAO.release();
-
-    axisProgram.release();
-}
-
-bool EarthWidget::toggleAxisVisibility()
-{
-    showAxis = !showAxis;
-    update();
-    return showAxis;
-}
-
-void EarthWidget::drawFPS()
-{
-    // Увеличиваем счетчик кадров
-    frameCount++;
-
-    // Проверяем, прошла ли секунда
-    float elapsed = fpsTimer.elapsed();
-    if (elapsed >= fpsUpdateInterval) {
-        currentFps = frameCount * (1000.0f / elapsed);
-        frameCount = 0;
-        fpsTimer.restart();
-    }
-
-    // Отрисовка FPS
-    QPainter painter(this);
-    painter.setRenderHint(QPainter::Antialiasing);
-
-    // Настройка шрифта
-    QFont font = painter.font();
-    font.setPointSize(12);
-    font.setBold(true);
-    painter.setFont(font);
-
-    // Настройка цвета и положения текста
-    painter.setPen(Qt::green);
-
-    // Рисуем фон для текста
-    QString fpsText = QString("FPS: %1").arg(QString::number(currentFps, 'f', 1));
-    QFontMetrics fm(font);
-    QRect textRect = fm.boundingRect(fpsText);
-    textRect.adjust(-5, -5, 5, 5); // Добавляем отступы
-    textRect.moveTopLeft(QPoint(10, 10));
-
-    painter.fillRect(textRect, QColor(0, 0, 0, 128));
-    painter.drawText(textRect, Qt::AlignCenter, fpsText);
+    emit satelliteSelected(closestSatelliteId);
+    return closestSatelliteId;
 }
