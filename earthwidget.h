@@ -62,6 +62,8 @@ private:
     QOpenGLShaderProgram lineProgram;
 
     QOpenGLTexture* earthTexture;
+    QOpenGLTexture* heightMapTexture;  // Добавляем текстуру высот
+    QOpenGLTexture* normalMapTexture;  // Добавляем карту нормалей
 
     QMatrix4x4 projection;
     QMatrix4x4 view;

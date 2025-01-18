@@ -4,6 +4,7 @@
 #include <cmath>
 #include <QPainter>
 #include <QDateTime>
+#include <QImageReader>
 
 EarthWidget::EarthWidget(QWidget *parent)
     : QOpenGLWidget(parent)
@@ -77,9 +78,24 @@ void EarthWidget::initShaders()
 
 void EarthWidget::initTextures()
 {
+    QImageReader::setAllocationLimit(0);
+    // Основная текстура
     earthTexture = new QOpenGLTexture(QImage(":/texture/earth.jpg").mirrored());
     earthTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     earthTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+    earthTexture->setWrapMode(QOpenGLTexture::Repeat);
+
+    // Карта высот
+    heightMapTexture = new QOpenGLTexture(QImage("./earth_height.png").mirrored());
+    heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+    heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
+
+    // Карта нормалей
+    normalMapTexture = new QOpenGLTexture(QImage("./earth_normal.png").mirrored());
+    normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+    normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
 }
 
 void EarthWidget::initSphereGeometry()
@@ -336,8 +352,14 @@ void EarthWidget::drawEarth()
     earthProgram.setUniformValue("model", earthMatrix);
     earthProgram.setUniformValue("viewPos", cameraPosition);
 
+    // Привязываем все текстуры
     earthTexture->bind(0);
+    heightMapTexture->bind(1);
+    normalMapTexture->bind(2);
+
     earthProgram.setUniformValue("earthTexture", 0);
+    earthProgram.setUniformValue("heightMap", 1);
+    earthProgram.setUniformValue("normalMap", 2);
 
     sphereVAO.bind();
     glDrawElements(GL_TRIANGLES, sphereVertexCount, GL_UNSIGNED_INT, 0);
