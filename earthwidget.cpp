@@ -399,10 +399,11 @@ void EarthWidget::drawTrajectories()
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
 
         lineProgram.setUniformValue("mvp", projection * view * model);
-        lineProgram.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 0.3f)); // полупрозрачный белый
+        lineProgram.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 0.3f));
 
         glLineWidth(1.0f);
-        glDrawArrays(GL_LINE_LOOP, 0, satellite.trajectory.size());
+        // Используем GL_LINE_STRIP вместо GL_LINE_LOOP
+        glDrawArrays(GL_LINE_STRIP, 0, satellite.trajectory.size());
 
         trajectoryVBO.release();
         trajectoryVBO.destroy();

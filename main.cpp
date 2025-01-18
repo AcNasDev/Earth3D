@@ -61,24 +61,28 @@ int main(int argc, char *argv[])
         int id;
         QVector3D position;
 
-        // Добавляем функцию расчета траекторий
+        // Функция расчета траекторий для дуги в 30 градусов
         void calculateTrajectories(float orbitRadius, QVector<QVector3D>& trajectory, QVector<QVector3D>& futureTrajectory) {
-            // Расчет полной орбиты
             trajectory.clear();
-            const int orbitPoints = 360; // точки для полной орбиты
-            for (int i = 0; i <= orbitPoints; ++i) {
-                float orbitAngle = i *  M_PI / orbitPoints;
+
+            // Расчет траектории: 30 градусов назад и вперед от текущей позиции
+            const int arcPoints = 30; // количество точек для дуги в 30 градусов
+            const float arcRange = 30.0f; // диапазон в градусах
+
+            // Рассчитываем точки для текущей дуги траектории
+            for (int i = -arcPoints; i <= arcPoints; ++i) {
+                float arcAngle = qDegreesToRadians(angle + (i * arcRange / arcPoints));
                 trajectory.append(QVector3D(
-                    orbitRadius * cos(orbitAngle),
+                    orbitRadius * cos(arcAngle),
                     0.0f,
-                    orbitRadius * sin(orbitAngle)
+                    orbitRadius * sin(arcAngle)
                     ));
             }
 
-            // Расчет будущей траектории
+            // Расчет будущей траектории (следующие 30 градусов)
             futureTrajectory.clear();
-            const int futurePoints = 100; // точки для будущей траектории
-            const float predictionTime = 10.0f; // время прогноза в секундах
+            const int futurePoints = 30;
+            const float predictionTime = 5.0f; // время прогноза в секундах
             float timeStep = predictionTime / futurePoints;
 
             for (int i = 0; i <= futurePoints; ++i) {
@@ -139,28 +143,6 @@ int main(int argc, char *argv[])
 
     // Таймер для обновления позиций спутников
     QTimer* timer = new QTimer(&mainWindow);
-    for(auto& sat : satelliteData) {
-        float radians = qDegreesToRadians(sat.angle);
-        sat.position = QVector3D(
-            ORBIT_RADIUS * cos(radians),
-            0.0f,
-            ORBIT_RADIUS * sin(radians)
-            );
-
-        QVector<QVector3D> trajectory, futureTrajectory;
-        sat.calculateTrajectories(ORBIT_RADIUS, trajectory, futureTrajectory);
-
-        earthWidget->addSatellite(
-            sat.id,
-            sat.position,
-            QString("Satellite %1 (Speed: %2°/s)").arg(sat.id).arg(sat.speed),
-            trajectory,
-            futureTrajectory,
-            sat.angle,
-            sat.speed
-            );
-    }
-
     // В таймере обновления позиций:
     QObject::connect(timer, &QTimer::timeout, [=, &satelliteData]() mutable {
         for(auto& sat : satelliteData) {
@@ -193,6 +175,29 @@ int main(int argc, char *argv[])
             }
         }
     });
+
+    // При инициализации спутников:
+    for(auto& sat : satelliteData) {
+        float radians = qDegreesToRadians(sat.angle);
+        sat.position = QVector3D(
+            ORBIT_RADIUS * cos(radians),
+            0.0f,
+            ORBIT_RADIUS * sin(radians)
+            );
+
+        QVector<QVector3D> trajectory, futureTrajectory;
+        sat.calculateTrajectories(ORBIT_RADIUS, trajectory, futureTrajectory);
+
+        earthWidget->addSatellite(
+            sat.id,
+            sat.position,
+            QString("Satellite %1 (Speed: %2°/s)").arg(sat.id).arg(sat.speed),
+            trajectory,
+            futureTrajectory,
+            sat.angle,
+            sat.speed
+            );
+    }
 
     // Запускаем таймер
     timer->start(16);
