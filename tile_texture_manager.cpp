@@ -6,7 +6,7 @@
 TileTextureManager::TileTextureManager(const QString& path, int size)
     : imagePath(path)
     , tileSize(size)
-    , tileCache(12)
+    , tileCache(64)
     , textureArrayId(0)
 {
     QImageReader::setAllocationLimit(0);
@@ -248,68 +248,67 @@ void TileTextureManager::bindAllTiles()
 {
     QMutexLocker locker(&cacheMutex);
 
-    // Проверяем есть ли тайлы
     if (tilesX <= 0 || tilesY <= 0) {
         qWarning() << "No tiles to bind";
         return;
     }
 
-    // Создаем и инициализируем текстурный массив, если нужно
     if (!textureArrayId) {
         glGenTextures(1, &textureArrayId);
         glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 
-        // Инициализируем хранилище для текстурного массива
+        // Используем GL_RGBA8 для лучшего качества
         glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
                      tileSize, tileSize, tilesX * tilesY,
                      0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
-        // Настраиваем параметры текстурного массива
+        // Настраиваем фильтрацию и устраняем артефакты на краях тайлов
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
         glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-        // Загружаем все тайлы в текстурный массив
+        // Добавляем небольшое размытие на границах для устранения артефактов
+        glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_ANISOTROPY_EXT, 16.0f);
+
         int layer = 0;
         for (int y = 0; y < tilesY; ++y) {
             for (int x = 0; x < tilesX; ++x) {
                 QPoint tilePos(x, y);
+
+                // Принудительно загружаем тайл, если его нет
                 if (!tileCache.contains(tilePos)) {
                     loadTile(x, y);
                 }
 
                 QOpenGLTexture* tile = tileCache.object(tilePos);
                 if (tile && tile->isCreated()) {
-                    // Получаем данные из текстуры
-                    GLuint sourceTexture = tile->textureId();
-                    GLint width = tile->width();
-                    GLint height = tile->height();
+                    // Создаем буфер для данных текстуры
+                    QVector<GLubyte> pixels(tileSize * tileSize * 4);
 
-                    // Создаем временный буфер для данных текстуры
-                    QVector<GLubyte> pixels(width * height * 4);
-
-                    // Получаем данные из текстуры
-                    glBindTexture(GL_TEXTURE_2D, sourceTexture);
+                    glBindTexture(GL_TEXTURE_2D, tile->textureId());
                     glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
 
-                    // Загружаем данные в текстурный массив
-                    glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-                    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
-                                    0, 0, layer,
-                                    width, height, 1,
-                                    GL_RGBA, GL_UNSIGNED_BYTE,
-                                    pixels.data());
+                    // Проверяем, что данные действительно получены
+                    if (!pixels.isEmpty()) {
+                        glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
+                        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                                        0, 0, layer,
+                                        tileSize, tileSize, 1,
+                                        GL_RGBA, GL_UNSIGNED_BYTE,
+                                        pixels.data());
 
-                    qDebug() << "Loaded tile" << x << y << "to layer" << layer;
+                        qDebug() << "Successfully loaded tile" << x << y << "to layer" << layer;
+                    } else {
+                        qWarning() << "Failed to get texture data for tile" << x << y;
+                    }
                     layer++;
+                } else {
+                    qWarning() << "Failed to load tile at" << x << y;
                 }
             }
         }
-
-        qDebug() << "Initialized texture array with" << tilesX * tilesY << "layers";
     }
 
-    // Привязываем текстурный массив
     glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 }

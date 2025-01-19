@@ -10,19 +10,21 @@ uniform int tilesX;
 uniform int tilesY;
 
 out vec2 TexCoord;
-out vec2 GlobalTexCoord; // Добавляем для определения тайла
+out vec2 GlobalTexCoord;
 out vec3 WorldPos;
 out vec3 WorldNormal;
 
 void main()
 {
-    // Сохраняем оригинальные текстурные координаты для определения тайла
+    // Сохраняем глобальные текстурные координаты
     GlobalTexCoord = texCoord;
 
-    // Вычисляем локальные текстурные координаты внутри тайла
-    float tileU = fract(texCoord.x * tilesX);
-    float tileV = fract(texCoord.y * tilesY);
-    TexCoord = vec2(tileU, tileV);
+    // Вычисляем индексы тайла
+    float tileXf = texCoord.x * tilesX;
+    float tileYf = texCoord.y * tilesY;
+
+    // Используем fract для плавных переходов
+    TexCoord = vec2(fract(tileXf), fract(tileYf));
 
     WorldPos = vec3(model * vec4(position, 1.0));
     WorldNormal = normalMatrix * normal;

@@ -14,7 +14,7 @@ out vec4 FragColor;
 
 void main()
 {
-    // Определяем индекс тайла
+    // Вычисляем индексы тайлов
     int tileX = int(GlobalTexCoord.x * tilesX);
     int tileY = int(GlobalTexCoord.y * tilesY);
 
@@ -22,19 +22,22 @@ void main()
     tileX = clamp(tileX, 0, tilesX - 1);
     tileY = clamp(tileY, 0, tilesY - 1);
 
-    // Вычисляем индекс слоя в текстурном массиве
+    // Вычисляем индекс слоя
     int layerIndex = tileY * tilesX + tileX;
 
-    // Семплируем текстуры из текстурных массивов
+    // Получаем цвет из текущего тайла
     vec4 color = texture(earthTexture, vec3(TexCoord, layerIndex));
-    vec4 height = texture(heightMap, vec3(TexCoord, layerIndex));
-    vec4 normalTex = texture(normalMap, vec3(TexCoord, layerIndex));
+    vec4 heightValue = texture(heightMap, vec3(TexCoord, layerIndex));
+    vec4 normalValue = texture(normalMap, vec3(TexCoord, layerIndex));
 
     // Применяем освещение
-    vec3 normal = normalize(normalTex.rgb * 2.0 - 1.0);
+    vec3 normal = normalize(normalValue.rgb * 2.0 - 1.0);
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     float diff = max(dot(normal, lightDir), 0.0);
 
-    // Финальный цвет
-    FragColor = color * (diff * 0.7 + 0.3);
+    // Добавляем ambient освещение для лучшей видимости деталей
+    float ambient = 0.3;
+    float lighting = ambient + diff * 0.7;
+
+    FragColor = color * lighting;
 }
