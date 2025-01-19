@@ -2,10 +2,10 @@
 #include <QImage>
 #include <QtMath>
 
-TileTextureManager::TileTextureManager(const QString& path, int numRings, int numSegments)
+TileTextureManager::TileTextureManager(const QString& path, int _numRings, int _numSegments)
     : imagePath(path)
-    , rings(numRings)
-    , segments(numSegments)
+    , numRings(_numRings)
+    , numSegments(_numSegments)
 {
     initializeOpenGLFunctions();
 }
@@ -37,49 +37,14 @@ void TileTextureManager::initialize()
         sourceImage = sourceImage.convertToFormat(QImage::Format_RGBA8888);
     }
 
-    // Выводим информацию об изображении
-    qDebug() << "Source image loaded:"
-             << "\nPath:" << imagePath
-             << "\nSize:" << sourceImage.size()
-             << "\nFormat:" << sourceImage.format()
-             << "\nDepth:" << sourceImage.depth()
-             << "\nBytes per line:" << sourceImage.bytesPerLine();
-
-    // Проверяем, что изображение валидно после конвертации
-    if (sourceImage.isNull() || !sourceImage.valid(0, 0)) {
-        qDebug() << "Source image is invalid after conversion";
-        return;
+    for (int ring = 0; ring < numRings; ++ring) {
+        for (int segment = 0; segment < numSegments; ++segment) {
+            loadTile(ring, segment);
+        }
     }
 }
 
-void TileTextureManager::updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model)
-{
-    QSet<QPair<int, int>> newVisibleTiles;
 
-    // Проверяем каждый сегмент на видимость
-    for (int ring = 0; ring < rings; ++ring) {
-        for (int segment = 0; segment < segments; ++segment) {
-            QRectF bounds = calculateTileBounds(ring, segment);
-            if (isTileInViewFrustum(bounds, viewProjection * model)) {
-                newVisibleTiles.insert({ring, segment});
-
-                // Загружаем тайл, если он еще не загружен
-                if (!tiles.contains({ring, segment}) || !tiles[{ring, segment}].isLoaded) {
-                    loadTile(ring, segment);
-                }
-            }
-        }
-    }
-
-    // Выгружаем невидимые тайлы
-    for (auto it = tiles.begin(); it != tiles.end(); ++it) {
-        if (!newVisibleTiles.contains({it.key().first, it.key().second})) {
-            unloadTile(it.key().first, it.key().second);
-        }
-    }
-
-    visibleTiles = newVisibleTiles;
-}
 
 bool TileTextureManager::isTileLoaded(int ring, int segment)
 {
@@ -93,27 +58,30 @@ void TileTextureManager::loadTile(int ring, int segment)
         return;
     }
 
-    // Получаем границы тайла
-    QRectF bounds = calculateTileBounds(ring, segment);
+    // Вычисляем границы тайла в UV-координатах
+    float u1 = static_cast<float>(segment) / numSegments;
+    float u2 = static_cast<float>(segment + 1) / numSegments;
+    float v1 = static_cast<float>(ring) / numRings;
+    float v2 = static_cast<float>(ring + 1) / numRings;
 
-    // Вычисляем пиксельные координаты в исходном изображении
-    int x = bounds.x() * sourceImage.width();
-    int y = bounds.y() * sourceImage.height();
-    int width = bounds.width() * sourceImage.width();
-    int height = bounds.height() * sourceImage.height();
+    // Вычисляем границы в пикселях
+    int x = u1 * sourceImage.width();
+    int y = v1 * sourceImage.height();
+    int width = (u2 - u1) * sourceImage.width();
+    int height = (v2 - v1) * sourceImage.height();
 
-    // Вырезаем часть изображения для тайла
+    qDebug() << "Creating tile" << ring << segment
+             << "from" << QRect(x, y, width, height);
+
+    // Вырезаем участок изображения для тайла
     QImage tileImage = sourceImage.copy(x, y, width, height);
 
-    // Конвертируем в формат RGBA
-    tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
-
-    // Создаем текстуру OpenGL
+    // Создаем текстуру
     GLuint textureId;
     glGenTextures(1, &textureId);
     glBindTexture(GL_TEXTURE_2D, textureId);
 
-    // Устанавливаем параметры текстуры
+    // Параметры текстуры
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
@@ -122,15 +90,18 @@ void TileTextureManager::loadTile(int ring, int segment)
     // Загружаем данные текстуры
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
                  tileImage.width(), tileImage.height(), 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, tileImage.bits());
+                 GL_RGBA, GL_UNSIGNED_BYTE, tileImage.constBits());
 
     // Сохраняем информацию о тайле
     Tile tile;
     tile.textureId = textureId;
+    tile.image = tileImage;
     tile.isLoaded = true;
-    tile.bounds = bounds;
+    tile.texCoords = QRectF(u1, v1, u2 - u1, v2 - v1);
 
     tiles.insert({ring, segment}, tile);
+
+    qDebug() << "Tile" << ring << segment << "created with ID" << textureId;
 }
 
 void TileTextureManager::unloadTile(int ring, int segment)
@@ -151,11 +122,6 @@ QRectF TileTextureManager::calculateTileBounds(int ring, int segment) const
     float v2 = static_cast<float>(ring + 1) / ring;
 
     return QRectF(QPointF(u1, v1), QPointF(u2, v2));
-}
-bool TileTextureManager::isTileVisible(int ring, int segment) const
-{
-    // Проверяем, есть ли тайл в списке видимых
-    return visibleTiles.contains({ring, segment});
 }
 
 bool TileTextureManager::isTileInViewFrustum(const QRectF& bounds, const QMatrix4x4& viewProjection) const

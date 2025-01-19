@@ -9,9 +9,11 @@
 
 struct Tile {
     GLuint textureId;
+    QImage image;      // Сохраняем изображение тайла
     bool isLoaded;
-    QRectF bounds;  // Границы тайла в UV-координатах
+    QRectF texCoords;  // UV-координаты тайла
 };
+
 
 class TileTextureManager : protected QOpenGLFunctions {
 public:
@@ -19,9 +21,7 @@ public:
     ~TileTextureManager();
 
     void initialize();
-    void updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model);
     void bindTileForSegment(int ring, int segment);
-    bool isTileVisible(int ring, int segment) const;
     void loadTile(int ring, int segment);
     bool isTileLoaded(int ring, int segment);
 private:
@@ -30,11 +30,10 @@ private:
     bool isTileInViewFrustum(const QRectF& bounds, const QMatrix4x4& viewProjection) const;
 
     QString imagePath;
+    QHash<QPair<int, int>, Tile> tiles;
     QImage sourceImage;
-    int rings;
-    int segments;
-    QMap<QPair<int, int>, Tile> tiles;  // Ключ: (ring, segment)
-    QSet<QPair<int, int>> visibleTiles;
+    int numRings;
+    int numSegments;
 
     static constexpr int MAX_LOADED_TILES = 128;  // Максимальное количество загруженных тайлов
 };

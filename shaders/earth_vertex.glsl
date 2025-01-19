@@ -18,14 +18,13 @@ out float Visibility;
 
 void main()
 {
-    // Определяем принадлежность вершины текущему тайлу
-    bool isCurrentTile = (int(segmentIndex.x) == currentRing &&
-                         int(segmentIndex.y) == currentSegment);
+    // Определяем видимость для текущего тайла
+    Visibility = (int(segmentIndex.x) == currentRing &&
+                 int(segmentIndex.y) == currentSegment) ? 1.0 : 0.0;
 
     WorldPos = vec3(model * vec4(position, 1.0));
     WorldNormal = normalize(normalMatrix * normal);
     TexCoord = texCoord;
-    Visibility = float(isCurrentTile);
 
     gl_Position = mvp * vec4(position, 1.0);
 }

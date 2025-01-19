@@ -13,7 +13,6 @@ public:
 
     void initialize() override;
     void render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model) override;
-    void updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model);
 
 private:
     void initShaders();
