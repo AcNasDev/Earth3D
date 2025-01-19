@@ -1,13 +1,13 @@
-// earth_renderer.h
 #ifndef EARTH_RENDERER_H
 #define EARTH_RENDERER_H
 
 #include "renderer.h"
+#include "tile_texture_manager.h"
 #include <QOpenGLTexture>
-#include <QVector3D>
+#include <QOpenGLBuffer>
+#include <QMatrix4x4>
 
-class EarthRenderer : public Renderer
-{
+class EarthRenderer : public Renderer {
 public:
     explicit EarthRenderer(float radius);
     ~EarthRenderer() override;
@@ -20,16 +20,27 @@ private:
     void initTextures();
     void initGeometry();
     void createSphere(int rings, int segments);
+    GLint getMaxTextureSize();
 
-    QOpenGLTexture* earthTexture;
-    QOpenGLTexture* heightMapTexture;
-    QOpenGLTexture* normalMapTexture;
+    // Константы
+    static constexpr int RINGS = 180;
+    static constexpr int SEGMENTS = 360;
+    static constexpr float DEFAULT_DISPLACEMENT_SCALE = 0.15f;
+
+    // Менеджеры тайлов для текстур
+    TileTextureManager* earthTextureTiles;
+    TileTextureManager* heightMapTiles;
+    TileTextureManager* normalMapTiles;
+
+    // Буферы OpenGL
     QOpenGLBuffer indexBuffer;
-
-    float displacementScale;  // Добавьте это поле
     float radius;
     int vertexCount;
-    static constexpr int RINGS = 1024;
-    static constexpr int SEGMENTS = 1024;
+    float displacementScale;
+
+    // Текущее состояние
+    QVector2D currentViewCenter;
+    bool texturesInitialized;
 };
+
 #endif // EARTH_RENDERER_H

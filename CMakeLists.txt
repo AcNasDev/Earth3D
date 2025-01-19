@@ -48,6 +48,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         trajectory_renderer.h trajectory_renderer.cpp
         renderer.cpp
         satellite_info_renderer.h satellite_info_renderer.cpp
+        tile_texture_manager.h tile_texture_manager.cpp
 
 
     )

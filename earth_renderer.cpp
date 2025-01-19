@@ -3,37 +3,42 @@
 #include <QtMath>
 #include <QCoreApplication>
 #include <QImageReader>
+#include <QDebug>
 
 EarthRenderer::EarthRenderer(float radius)
     : Renderer()
-    , earthTexture(nullptr)        // Добавить эту инициализацию
-    , heightMapTexture(nullptr)    // Добавить эту инициализацию
-    , normalMapTexture(nullptr)    // Добавить эту инициализацию
+    , earthTextureTiles(nullptr)
+    , heightMapTiles(nullptr)
+    , normalMapTiles(nullptr)
     , indexBuffer(QOpenGLBuffer::IndexBuffer)
     , radius(radius)
     , vertexCount(0)
-    , displacementScale(0.05f)
+    , displacementScale(DEFAULT_DISPLACEMENT_SCALE)
+    , texturesInitialized(false)
 {
 }
 
 EarthRenderer::~EarthRenderer()
 {
-    if (earthTexture)
-        delete earthTexture;
-    if (heightMapTexture)
-        delete heightMapTexture;
-    if (normalMapTexture)
-        delete normalMapTexture;
-    if (indexBuffer.isCreated())
+    delete earthTextureTiles;
+    delete heightMapTiles;
+    delete normalMapTiles;
+
+    if (indexBuffer.isCreated()) {
         indexBuffer.destroy();
+    }
 }
 
 void EarthRenderer::initialize()
 {
-    if (!init()) {  // Вызов базового метода для инициализации OpenGL функций
+    if (!init()) {
         qDebug() << "Failed to initialize OpenGL functions for EarthRenderer";
         return;
     }
+
+    // Проверяем максимальный поддерживаемый размер текстур
+    GLint maxTextureSize = getMaxTextureSize();
+    qDebug() << "Maximum supported texture size:" << maxTextureSize;
 
     initShaders();
     initTextures();
@@ -42,68 +47,35 @@ void EarthRenderer::initialize()
 
 void EarthRenderer::initShaders()
 {
-    if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/earth_vertex.glsl"))
+    if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/earth_vertex.glsl")) {
         qDebug() << "Failed to compile earth vertex shader";
+    }
 
-    if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/earth_fragment.glsl"))
+    if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/earth_fragment.glsl")) {
         qDebug() << "Failed to compile earth fragment shader";
+    }
 
-    if (!program.link())
+    if (!program.link()) {
         qDebug() << "Failed to link earth shader program";
+    }
 }
 
 void EarthRenderer::initTextures()
 {
-    QImageReader::setAllocationLimit(0);
     QString buildDir = QCoreApplication::applicationDirPath();
+    int tileSize = 2048; // Оптимальный размер тайла
 
-    // Загрузка текстуры Земли
-    QImage earthImage(buildDir + "/textures/earth.jpg");
-    if (!earthImage.isNull()) {
-        earthTexture = new QOpenGLTexture(earthImage.mirrored());
-        if (!earthTexture->isCreated()) {
-            delete earthTexture;
-            earthTexture = nullptr;
-            qDebug() << "Failed to create earth texture";
-        } else {
-            earthTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-            earthTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-            earthTexture->setWrapMode(QOpenGLTexture::Repeat);
-        }
-    }
+    // Создаем менеджеры тайлов
+    earthTextureTiles = new TileTextureManager(buildDir + "/textures/earth.jpg", tileSize);
+    heightMapTiles = new TileTextureManager(buildDir + "/textures/earth_height.png", tileSize);
+    normalMapTiles = new TileTextureManager(buildDir + "/textures/earth_normal.png", tileSize);
 
-    // Загрузка карты высот
-    QImage heightImage(buildDir + "/textures/earth_height.png");
-    if (!heightImage.isNull()) {
-        GLint maxTextureSize;
-        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
-        heightImage = heightImage.scaled(maxTextureSize, maxTextureSize);
-        heightMapTexture = new QOpenGLTexture(heightImage.mirrored());
-        if (!heightMapTexture->isCreated()) {
-            delete heightMapTexture;
-            heightMapTexture = nullptr;
-            qDebug() << "Failed to create height map texture";
-        } else {
-            heightMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-            heightMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-            heightMapTexture->setWrapMode(QOpenGLTexture::Repeat);
-        }
-    }
+    // Инициализируем менеджеры
+    earthTextureTiles->initialize();
+    heightMapTiles->initialize();
+    normalMapTiles->initialize();
 
-    // Загрузка карты нормалей
-    QImage normalImage(buildDir + "/textures/earth_normal.png");
-    if (!normalImage.isNull()) {
-        normalMapTexture = new QOpenGLTexture(normalImage.mirrored());
-        if (!normalMapTexture->isCreated()) {
-            delete normalMapTexture;
-            normalMapTexture = nullptr;
-            qDebug() << "Failed to create normal map texture";
-        } else {
-            normalMapTexture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-            normalMapTexture->setMagnificationFilter(QOpenGLTexture::Linear);
-            normalMapTexture->setWrapMode(QOpenGLTexture::Repeat);
-        }
-    }
+    texturesInitialized = true;
 }
 
 void EarthRenderer::initGeometry()
@@ -111,11 +83,9 @@ void EarthRenderer::initGeometry()
     vao.create();
     vao.bind();
 
-    // Создаем буферы
     vbo.create();
     indexBuffer.create();
 
-    // Создаем геометрию сферы
     createSphere(RINGS, SEGMENTS);
 
     vao.release();
@@ -182,8 +152,19 @@ void EarthRenderer::createSphere(int rings, int segments)
                           reinterpret_cast<void*>(5 * sizeof(GLfloat)));
 }
 
+GLint EarthRenderer::getMaxTextureSize()
+{
+    GLint maxSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
+    return maxSize;
+}
+
 void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
 {
+    if (!texturesInitialized) {
+        return;
+    }
+
     program.bind();
     vao.bind();
 
@@ -191,31 +172,37 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     QMatrix4x4 earthMatrix = model;
     earthMatrix.scale(radius);
 
-    // Устанавливаем униформы
+    // Устанавливаем униформы для шейдеров
     program.setUniformValue("mvp", projection * view * earthMatrix);
     program.setUniformValue("model", earthMatrix);
     program.setUniformValue("normalMatrix", earthMatrix.normalMatrix());
-    program.setUniformValue("viewPos", view.inverted().column(3).toVector3D());
-    program.setUniformValue("displacementScale", displacementScale);
 
-    // Привязываем текстуры
-    if (earthTexture) {
-        earthTexture->bind(0);
-        program.setUniformValue("earthTexture", 0);
-    }
-
-    if (heightMapTexture) {
-        heightMapTexture->bind(1);
-        program.setUniformValue("heightMap", 1);
-    }
-
-    if (normalMapTexture) {
-        normalMapTexture->bind(2);
-        program.setUniformValue("normalMap", 2);
-    }
-
+    // Получаем позицию камеры
     QVector3D cameraPos = view.inverted().column(3).toVector3D();
     program.setUniformValue("viewPos", cameraPos);
+
+    // Устанавливаем масштаб смещения для рельефа
+    program.setUniformValue("displacementScale", displacementScale);
+
+    // Привязываем текстуры и обновляем тайлы
+    // Текстурный юнит 0 для цветовой текстуры
+    glActiveTexture(GL_TEXTURE0);
+    earthTextureTiles->bindTileForCoordinate(currentViewCenter);
+    program.setUniformValue("earthTexture", 0);
+
+    // Текстурный юнит 1 для карты высот
+    glActiveTexture(GL_TEXTURE1);
+    heightMapTiles->bindTileForCoordinate(currentViewCenter);
+    program.setUniformValue("heightMap", 1);
+
+    // Текстурный юнит 2 для карты нормалей
+    glActiveTexture(GL_TEXTURE2);
+    normalMapTiles->bindTileForCoordinate(currentViewCenter);
+    program.setUniformValue("normalMap", 2);
+
+    // Передаем информацию о текущем тайле в шейдер
+    QVector4D tileInfo = heightMapTiles->getCurrentTileInfo(currentViewCenter);
+    program.setUniformValue("tileInfo", tileInfo);
 
     // Рендерим сферу
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
