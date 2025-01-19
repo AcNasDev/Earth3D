@@ -107,15 +107,18 @@ void EarthRenderer::createSphere(int rings, int segments)
             float y = cos(phi);
             float z = sin(phi) * sin(theta);
 
-            // Позиция
             vertices << x << y << z;
 
-            // Текстурные координаты
-            vertices << (1.0f - static_cast<float>(segment) / segments)
-                     << (1.0f - static_cast<float>(ring) / rings);
+            // Текстурные координаты - важно генерировать их правильно
+            float u = 1.0f - static_cast<float>(segment) / segments;
+            float v = 1.0f - static_cast<float>(ring) / rings;
+            vertices << u << v;
 
-            // Нормали (совпадают с позицией для сферы)
+            // Нормали
             vertices << x << y << z;
+
+            // Отладка
+            qDebug() << "Vertex:" << x << y << z << "TexCoord:" << u << v;
         }
     }
 

@@ -125,21 +125,27 @@ QPoint TileTextureManager::texCoordToTile(const QVector2D& texCoord)
 
 void TileTextureManager::bindTileForCoordinate(const QVector2D& texCoord)
 {
-    QPoint tilePos = texCoordToTile(texCoord);
+    qDebug() << "Binding tile for coordinate:" << texCoord;
 
-    // Проверяем границы
+    // Убедимся, что координаты в правильном диапазоне
+    float x = qBound(0.0f, texCoord.x(), 1.0f);
+    float y = qBound(0.0f, texCoord.y(), 1.0f);
+
+    QPoint tilePos = texCoordToTile(QVector2D(x, y));
+    qDebug() << "Calculated tile position:" << tilePos;
+
     if (tilePos.x() >= 0 && tilePos.x() < tilesX &&
         tilePos.y() >= 0 && tilePos.y() < tilesY) {
 
-        // Загружаем тайл если нужно
         if (!tileCache.contains(tilePos)) {
             loadTile(tilePos.x(), tilePos.y());
         }
 
-        // Привязываем текстуру
         QOpenGLTexture* texture = tileCache.object(tilePos);
         if (texture) {
             texture->bind();
+            qDebug() << "Bound texture for tile:" << tilePos
+                     << "Size:" << texture->width() << "x" << texture->height();
         }
     }
 }
@@ -152,25 +158,37 @@ QVector4D TileTextureManager::getCurrentTileInfo(const QVector2D& texCoord)
 
 QVector4D TileTextureManager::calculateTileInfo(const QPoint& tilePos)
 {
-    // Вычисляем смещение и масштаб для тайла
-    float tileWidth = static_cast<float>(tileSize) / originalSize.width();
-    float tileHeight = static_cast<float>(tileSize) / originalSize.height();
+    // Проверяем границы
+    if (tilePos.x() < 0 || tilePos.x() >= tilesX ||
+        tilePos.y() < 0 || tilePos.y() >= tilesY) {
+        qDebug() << "Invalid tile position:" << tilePos;
+        return QVector4D(0, 0, 1, 1);
+    }
 
-    // Позиция тайла в текстурных координатах [0,1]
+    // Вычисляем смещение тайла
     float offsetX = static_cast<float>(tilePos.x() * tileSize) / originalSize.width();
     float offsetY = static_cast<float>(tilePos.y() * tileSize) / originalSize.height();
 
-    // Корректировка для последних тайлов
+    // Вычисляем масштаб тайла
+    float scaleX = static_cast<float>(tileSize) / originalSize.width();
+    float scaleY = static_cast<float>(tileSize) / originalSize.height();
+
+    // Корректируем масштаб для последних тайлов
     if (tilePos.x() == tilesX - 1) {
-        tileWidth = static_cast<float>(originalSize.width() % tileSize) / originalSize.width();
+        int lastTileWidth = originalSize.width() - (tilesX - 1) * tileSize;
+        scaleX = static_cast<float>(lastTileWidth) / originalSize.width();
     }
     if (tilePos.y() == tilesY - 1) {
-        tileHeight = static_cast<float>(originalSize.height() % tileSize) / originalSize.height();
+        int lastTileHeight = originalSize.height() - (tilesY - 1) * tileSize;
+        scaleY = static_cast<float>(lastTileHeight) / originalSize.height();
     }
 
-    qDebug() << "Tile info for pos:" << tilePos
-             << "Offset:" << offsetX << offsetY
-             << "Scale:" << tileWidth << tileHeight;
+    QVector4D tileInfo(offsetX, offsetY, scaleX, scaleY);
+    qDebug() << "Tile info for pos" << tilePos << ":"
+             << "\nOffset:" << offsetX << offsetY
+             << "\nScale:" << scaleX << scaleY
+             << "\nTile size:" << tileSize
+             << "\nOriginal size:" << originalSize;
 
-    return QVector4D(offsetX, offsetY, tileWidth, tileHeight);
+    return tileInfo;
 }
