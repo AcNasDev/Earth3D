@@ -159,6 +159,25 @@ GLint EarthRenderer::getMaxTextureSize()
     return maxSize;
 }
 
+QVector2D EarthRenderer::calculateTextureCoordinate(const QVector3D& cameraPos)
+{
+    // Преобразуем позицию камеры в сферические координаты
+    float longitude = atan2(cameraPos.z(), cameraPos.x());
+    float latitude = asin(cameraPos.y() / cameraPos.length());
+
+    // Нормализуем долготу и широту в диапазон [0,1]
+    // longitude: от -PI до PI -> [0,1]
+    // latitude: от -PI/2 до PI/2 -> [0,1]
+    float u = (longitude + M_PI) / (2.0f * M_PI);
+    float v = (latitude + M_PI_2) / M_PI;
+
+    qDebug() << "Camera spherical coords - longitude:" << longitude
+             << "latitude:" << latitude
+             << "UV coords:" << u << v;
+
+    return QVector2D(u, v);
+}
+
 void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
 {
     if (!texturesInitialized) {
@@ -179,6 +198,7 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
 
     // Получаем позицию камеры
     QVector3D cameraPos = view.inverted().column(3).toVector3D();
+    QVector2D texCoord = calculateTextureCoordinate(cameraPos);
     program.setUniformValue("viewPos", cameraPos);
 
     // Устанавливаем масштаб смещения для рельефа
@@ -187,21 +207,21 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     // Привязываем текстуры и обновляем тайлы
     // Текстурный юнит 0 для цветовой текстуры
     glActiveTexture(GL_TEXTURE0);
-    earthTextureTiles->bindTileForCoordinate(currentViewCenter);
+    earthTextureTiles->bindTileForCoordinate(texCoord);
     program.setUniformValue("earthTexture", 0);
 
     // Текстурный юнит 1 для карты высот
     glActiveTexture(GL_TEXTURE1);
-    heightMapTiles->bindTileForCoordinate(currentViewCenter);
+    heightMapTiles->bindTileForCoordinate(texCoord);
     program.setUniformValue("heightMap", 1);
 
     // Текстурный юнит 2 для карты нормалей
     glActiveTexture(GL_TEXTURE2);
-    normalMapTiles->bindTileForCoordinate(currentViewCenter);
+    normalMapTiles->bindTileForCoordinate(texCoord);
     program.setUniformValue("normalMap", 2);
 
     // Передаем информацию о текущем тайле в шейдер
-    QVector4D tileInfo = heightMapTiles->getCurrentTileInfo(currentViewCenter);
+    QVector4D tileInfo = heightMapTiles->getCurrentTileInfo(texCoord);
     program.setUniformValue("tileInfo", tileInfo);
 
     // Рендерим сферу

@@ -63,81 +63,55 @@ void TileTextureManager::loadTile(int x, int y)
         return;
     }
 
-    // Вырезаем часть изображения для тайла
-    QRect region = tiles[y * tilesX + x].region;
-    QImage tileImage = sourceImage.copy(region);
+    // Вычисляем размер этого конкретного тайла
+    int currentTileWidth = qMin(tileSize, originalSize.width() - x * tileSize);
+    int currentTileHeight = qMin(tileSize, originalSize.height() - y * tileSize);
 
-    if (tileImage.isNull()) {
-        qDebug() << "Failed to create tile image at" << x << y;
-        return;
+    QRect region(x * tileSize, y * tileSize, currentTileWidth, currentTileHeight);
+
+    qDebug() << "Loading tile region:" << region
+             << "for position:" << x << y;
+
+    if (!sourceImage.isNull()) {
+        QImage tileImage = sourceImage.copy(region);
+
+        if (tileImage.isNull()) {
+            qWarning() << "Failed to create tile image at" << x << y;
+            return;
+        }
+
+        // Проверяем и выводим информацию о первых пикселях
+        QRgb firstPixel = tileImage.pixel(0, 0);
+        qDebug() << "First pixel RGBA:"
+                 << qRed(firstPixel)
+                 << qGreen(firstPixel)
+                 << qBlue(firstPixel)
+                 << qAlpha(firstPixel);
+
+        // Конвертируем в RGBA8888 если нужно
+        if (tileImage.format() != QImage::Format_RGBA8888) {
+            tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
+        }
+
+        QOpenGLTexture* texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
+        texture->setFormat(QOpenGLTexture::RGBA8_UNorm);
+        texture->setSize(tileImage.width(), tileImage.height());
+        texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        texture->setMagnificationFilter(QOpenGLTexture::Linear);
+        texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+        texture->allocateStorage();
+
+        texture->setData(
+            QOpenGLTexture::RGBA,
+            QOpenGLTexture::UInt8,
+            tileImage.constBits()
+            );
+
+        texture->generateMipMaps();
+        tileCache.insert(tilePos, texture);
+    } else {
+        qWarning() << "Source image is null!";
     }
-
-    // Определяем формат текстуры на основе формата изображения
-    QOpenGLTexture::TextureFormat textureFormat;
-    QOpenGLTexture::PixelFormat pixelFormat;
-    QOpenGLTexture::PixelType pixelType;
-
-    switch (tileImage.format()) {
-    case QImage::Format_RGB888:
-        textureFormat = QOpenGLTexture::RGB8_UNorm;
-        pixelFormat = QOpenGLTexture::RGB;
-        pixelType = QOpenGLTexture::UInt8;
-        break;
-    case QImage::Format_RGBA8888:
-        textureFormat = QOpenGLTexture::RGBA8_UNorm;
-        pixelFormat = QOpenGLTexture::RGBA;
-        pixelType = QOpenGLTexture::UInt8;
-        break;
-    case QImage::Format_RGB32:
-    case QImage::Format_ARGB32:
-        tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
-        textureFormat = QOpenGLTexture::RGBA8_UNorm;
-        pixelFormat = QOpenGLTexture::RGBA;
-        pixelType = QOpenGLTexture::UInt8;
-        break;
-    default:
-        // Для других форматов конвертируем в RGBA8888
-        tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
-        textureFormat = QOpenGLTexture::RGBA8_UNorm;
-        pixelFormat = QOpenGLTexture::RGBA;
-        pixelType = QOpenGLTexture::UInt8;
-        break;
-    }
-
-    QOpenGLTexture* texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
-    texture->setFormat(textureFormat);
-    texture->setSize(tileImage.width(), tileImage.height());
-
-    // Устанавливаем параметры фильтрации
-    texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-    texture->setMagnificationFilter(QOpenGLTexture::Linear);
-    texture->setWrapMode(QOpenGLTexture::ClampToEdge);
-
-    // Выделяем память с учетом формата
-    texture->allocateStorage();
-
-    qDebug() << "Loading tile at" << x << y
-             << "\nImage format:" << tileImage.format()
-             << "\nSize:" << tileImage.size()
-             << "\nBytes per line:" << tileImage.bytesPerLine()
-             << "\nDepth:" << tileImage.depth()
-             << "\nTexture format:" << textureFormat
-             << "\nPixel format:" << pixelFormat
-             << "\nPixel type:" << pixelType;
-
-    // Загружаем данные в текстуру
-    texture->setData(
-        pixelFormat,
-        pixelType,
-        tileImage.constBits(),
-        nullptr  // Опции загрузки
-        );
-
-    // Генерируем мипмапы
-    texture->generateMipMaps();
-
-    // Добавляем в кэш
-    tileCache.insert(tilePos, texture);
 }
 
 QPoint TileTextureManager::texCoordToTile(const QVector2D& texCoord)
@@ -178,30 +152,25 @@ QVector4D TileTextureManager::getCurrentTileInfo(const QVector2D& texCoord)
 
 QVector4D TileTextureManager::calculateTileInfo(const QPoint& tilePos)
 {
-    // Проверяем границы
-    if (tilePos.x() < 0 || tilePos.x() >= tilesX ||
-        tilePos.y() < 0 || tilePos.y() >= tilesY) {
-        return QVector4D(0, 0, 1, 1); // Возвращаем дефолтные значения для невалидного тайла
-    }
+    // Вычисляем смещение и масштаб для тайла
+    float tileWidth = static_cast<float>(tileSize) / originalSize.width();
+    float tileHeight = static_cast<float>(tileSize) / originalSize.height();
 
-    // Вычисляем смещение тайла в текстурных координатах
+    // Позиция тайла в текстурных координатах [0,1]
     float offsetX = static_cast<float>(tilePos.x() * tileSize) / originalSize.width();
     float offsetY = static_cast<float>(tilePos.y() * tileSize) / originalSize.height();
 
-    // Вычисляем масштаб тайла
-    float scaleX = static_cast<float>(tileSize) / originalSize.width();
-    float scaleY = static_cast<float>(tileSize) / originalSize.height();
-
-    // Для последнего тайла в ряду/столбце корректируем масштаб
+    // Корректировка для последних тайлов
     if (tilePos.x() == tilesX - 1) {
-        scaleX = static_cast<float>(originalSize.width() - tilePos.x() * tileSize) / originalSize.width();
+        tileWidth = static_cast<float>(originalSize.width() % tileSize) / originalSize.width();
     }
     if (tilePos.y() == tilesY - 1) {
-        scaleY = static_cast<float>(originalSize.height() - tilePos.y() * tileSize) / originalSize.height();
+        tileHeight = static_cast<float>(originalSize.height() % tileSize) / originalSize.height();
     }
 
-    // Возвращаем вектор с информацией о тайле:
-    // xy - смещение тайла в текстурных координатах
-    // zw - масштаб тайла
-    return QVector4D(offsetX, offsetY, scaleX, scaleY);
+    qDebug() << "Tile info for pos:" << tilePos
+             << "Offset:" << offsetX << offsetY
+             << "Scale:" << tileWidth << tileHeight;
+
+    return QVector4D(offsetX, offsetY, tileWidth, tileHeight);
 }

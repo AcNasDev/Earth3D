@@ -41,6 +41,7 @@ private:
     // Текущее состояние
     QVector2D currentViewCenter;
     bool texturesInitialized;
+    QVector2D calculateTextureCoordinate(const QVector3D &cameraPos);
 };
 
 #endif // EARTH_RENDERER_H
