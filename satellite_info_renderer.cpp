@@ -200,18 +200,40 @@ void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x
 
 QImage SatelliteInfoRenderer::createTextImage(const QString& text)
 {
-    QFont font("Arial", 12);
+    QFont font("Arial", 12, QFont::Bold);  // Сделаем шрифт жирным для лучшей видимости
     QFontMetrics fm(font);
-    QSize textSize = fm.size(Qt::TextSingleLine, text);
+
+    // Учитываем переносы строк в тексте
+    QStringList lines = text.split('\n');
+    int maxWidth = 0;
+    int totalHeight = 0;
+
+    for (const QString& line : lines) {
+        QRect bounds = fm.boundingRect(line);
+        maxWidth = qMax(maxWidth, bounds.width());
+        totalHeight += bounds.height();
+    }
+
+    // Добавляем отступы
+    maxWidth += 20;  // 10 пикселей с каждой стороны
+    totalHeight += 20 + (lines.count() - 1) * 5;  // Отступы сверху и снизу + междустрочный интервал
 
     // Создаем изображение с прозрачным фоном
-    QImage image(textSize.width() + 10, textSize.height() + 10, QImage::Format_RGBA8888);
+    QImage image(maxWidth, totalHeight, QImage::Format_RGBA8888);
     image.fill(Qt::transparent);
 
     QPainter painter(&image);
     painter.setFont(font);
     painter.setPen(Qt::white);
-    painter.drawText(5, fm.ascent() + 5, text);
+    painter.setRenderHint(QPainter::TextAntialiasing);
+
+    // Рисуем текст
+    int y = 10;
+    for (const QString& line : lines) {
+        painter.drawText(10, y + fm.ascent(), line);
+        y += fm.height() + 5;  // Добавляем междустрочный интервал
+    }
+
     painter.end();
 
     return image;
