@@ -75,6 +75,9 @@ void EarthRenderer::initTextures()
     // Загрузка карты высот
     QImage heightImage(buildDir + "/textures/earth_height.png");
     if (!heightImage.isNull()) {
+        GLint maxTextureSize;
+        glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+        heightImage = heightImage.scaled(maxTextureSize, maxTextureSize);
         heightMapTexture = new QOpenGLTexture(heightImage.mirrored());
         if (!heightMapTexture->isCreated()) {
             delete heightMapTexture;
