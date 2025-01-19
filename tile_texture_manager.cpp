@@ -24,6 +24,7 @@ void TileTextureManager::initialize() {
         return;
     }
     sourceImage = sourceImage.mirrored(true, false);
+    sourceImage = sourceImage.scaled(4096, 4096);
 
     // Создаем атлас текстур
     tilesPerRow = std::ceil(std::sqrt(numRings * numSegments));

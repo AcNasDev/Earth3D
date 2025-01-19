@@ -14,10 +14,10 @@ uniform sampler2D normalMap;
 // Параметры освещения
 uniform vec3 lightPos;
 uniform vec3 viewPos;
-uniform float ambientStrength = 0.6;     // Увеличено для лучшего освещения теневой стороны
-uniform float specularStrength = 0.2;    // Уменьшено для менее агрессивного блика
-uniform float shininess = 8.0;           // Уменьшено для более мягкого блика
-uniform float atmosphereStrength = 0.15;  // Сила атмосферного рассеивания
+uniform float ambientStrength = 0.6;
+uniform float specularStrength = 0.2;
+uniform float shininess = 8.0;
+uniform float atmosphereStrength = 0.15;
 
 void main() {
     // Получаем цвет из текстуры
@@ -25,8 +25,8 @@ void main() {
     float height = texture(heightMap, vTexCoord).r;
     vec3 normalMap = normalize(texture(normalMap, vTexCoord).rgb * 2.0 - 1.0);
 
-    // Комбинируем нормаль из карты нормалей с геометрической нормалью
-    vec3 N = normalize(vNormal + normalMap * 0.5); // Уменьшен вклад карты нормалей
+    // Усиливаем влияние карты нормалей для более выраженного рельефа
+    vec3 N = normalize(vNormal + normalMap * 0.8);
 
     // Расчет освещения с учетом расстояния
     vec3 lightDir = normalize(lightPos - vFragPos);
@@ -42,12 +42,12 @@ void main() {
     float rimEffect = 1.0 - NdotV;
     vec3 ambient = (ambientStrength + rimEffect * atmosphereStrength) * texColor.rgb;
 
-    // Diffuse с плавным переходом
+    // Diffuse с плавным переходом и усилением теней
     float diff = max(dot(N, lightDir), 0.0);
-    diff = smoothstep(0.0, 1.0, diff); // Добавляем плавный переход
+    diff = smoothstep(0.0, 1.0, diff);
     vec3 diffuse = diff * texColor.rgb;
 
-    // Specular с использованием Blinn-Phong для более реалистичного блика
+    // Specular с использованием Blinn-Phong
     float spec = pow(max(dot(N, halfwayDir), 0.0), shininess);
     vec3 specular = specularStrength * spec * vec3(1.0);
 
@@ -55,9 +55,12 @@ void main() {
     diffuse *= attenuation;
     specular *= attenuation;
 
-    // Добавляем эффект высоты с меньшим влиянием
+    // Усиливаем эффект высоты для более выраженного рельефа
     vec3 color = ambient + diffuse + specular;
-    color *= (1.0 + height * 0.05); // Уменьшено влияние высоты
+    color *= (1.0 + height * 0.15); // Увеличено влияние высоты
+
+    // Добавляем эффект затенения в низинах
+    color *= (0.85 + height * 0.3);
 
     // Добавляем мягкое насыщение цвета
     color = color / (color + vec3(1.0));
