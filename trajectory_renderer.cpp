@@ -70,7 +70,7 @@ void TrajectoryRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_LINE_SMOOTH);
-    glLineWidth(2.0f);
+    glLineWidth(4.0f);
 
     GLint previousDepthFunc;
     glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunc);
@@ -102,19 +102,19 @@ void TrajectoryRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
 
     program.setUniformValue("mvp", mvp);
 
-    // Отрисовка текущей траектории
+    // Отрисовка текущей траектории (белая пунктирная линия)
     if (currentVertexCount > 0) {
         currentVBO.bind();
-        program.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 1.0f));
+        program.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 1.0f)); // Чисто белый цвет
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
         glEnableVertexAttribArray(0);
         glDrawArrays(GL_LINE_STRIP, 0, currentVertexCount);
     }
 
-    // Отрисовка предсказанной траектории
+    // Отрисовка предсказанной траектории (голубая линия)
     if (predictedVertexCount > 0) {
         predictedVBO.bind();
-        program.setUniformValue("color", QVector4D(0.0f, 1.0f, 1.0f, 0.5f));
+        program.setUniformValue("color", QVector4D(0.0f, 1.0f, 1.0f, 1.0f)); // Голубой цвет
         glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
         glEnableVertexAttribArray(0);
         glDrawArrays(GL_LINE_STRIP, 0, predictedVertexCount);
