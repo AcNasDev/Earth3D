@@ -46,31 +46,32 @@ bool SatelliteInfoRenderer::initShaders()
 {
     // Vertex shader
     const char* vertexShaderSource = R"(
-    #version 330 core
-    layout(location = 0) in vec3 position;
-    layout(location = 1) in vec2 texCoord;
+#version 330 core
+layout(location = 0) in vec3 position;
+layout(location = 1) in vec2 texCoord;
 
-    uniform mat4 mvp;
-    uniform vec3 billboardPos;
-    uniform vec2 billboardSize;
+uniform mat4 mvp;
+uniform vec3 billboardPos;
+uniform vec2 billboardSize;
 
-    out vec2 TexCoord;
+out vec2 TexCoord;
 
-    void main()
-    {
-        // Извлекаем только часть с поворотом и позицией из MVP матрицы
-        mat4 modelView = mvp;
-        modelView[0][0] = 1.0; modelView[0][1] = 0.0; modelView[0][2] = 0.0;
-        modelView[1][0] = 0.0; modelView[1][1] = 1.0; modelView[1][2] = 0.0;
-        modelView[2][0] = 0.0; modelView[2][1] = 0.0; modelView[2][2] = 1.0;
+void main()
+{
+    // Извлекаем только часть с поворотом из MVP матрицы
+    mat4 modelView = mvp;
+    // Сбрасываем масштабирование из матрицы вида
+    modelView[0][0] = 1.0; modelView[0][1] = 0.0; modelView[0][2] = 0.0;
+    modelView[1][0] = 0.0; modelView[1][1] = 1.0; modelView[1][2] = 0.0;
+    modelView[2][0] = 0.0; modelView[2][1] = 0.0; modelView[2][2] = 1.0;
 
-        // Создаем позицию вершины в пространстве экрана
-        vec4 pos = modelView * vec4(billboardPos, 1.0);
-        pos.xy += position.xy * billboardSize;
-        gl_Position = pos;
+    // Применяем размер и позицию
+    vec4 pos = modelView * vec4(billboardPos, 1.0);
+    pos.xy += position.xy * billboardSize;
+    gl_Position = pos;
 
-        TexCoord = texCoord;
-    }
+    TexCoord = texCoord;
+}
 )";
 
     // Fragment shader
@@ -151,9 +152,13 @@ bool SatelliteInfoRenderer::initGeometry()
 void SatelliteInfoRenderer::updateInfoTexture(const Satellite& satellite)
 {
     qDebug() << "Updating info texture for satellite ID:" << satellite.id;
-    QString info = QString("ID: %1\n%2").arg(satellite.id).arg(satellite.info);
-    QImage textImage = createTextImage(info);
 
+    // Создаем расширенную информацию о спутнике
+    QString info = QString("Satellite ID: %1\n%2")
+                       .arg(satellite.id)
+                       .arg(satellite.info);
+
+    QImage textImage = createTextImage(info);
     qDebug() << "Created text image size:" << textImage.size();
 
     if (texture) {
@@ -169,10 +174,13 @@ void SatelliteInfoRenderer::updateInfoTexture(const Satellite& satellite)
         return;
     }
 
-    texture->setMinificationFilter(QOpenGLTexture::Linear);
+    // Настройка параметров текстуры для лучшего качества
+    texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     texture->setMagnificationFilter(QOpenGLTexture::Linear);
     texture->setWrapMode(QOpenGLTexture::ClampToEdge);
-    qDebug() << "Successfully created texture";
+    texture->generateMipMaps();
+
+    qDebug() << "Successfully created texture with size:" << texture->width() << "x" << texture->height();
 }
 
 void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
@@ -187,21 +195,21 @@ void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x
     vao.bind();
     texture->bind();
 
-    // Отключаем тест глубины чтобы текст всегда был видим
+    // Отключаем тест глубины для отображения поверх других объектов
     glDisable(GL_DEPTH_TEST);
 
-    // Включаем прозрачность
+    // Настройка прозрачности
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Вычисляем позицию billboard'а с небольшим смещением вверх
+    // Вычисляем позицию с увеличенным смещением
     QVector3D offsetPos = satellite.position + QVector3D(0.0f, OFFSET, 0.0f);
 
     // Устанавливаем униформы
     QMatrix4x4 mvp = projection * view * model;
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("billboardPos", offsetPos);
-    program.setUniformValue("billboardSize", QVector2D(BILLBOARD_SIZE * 2.0f, BILLBOARD_SIZE));  // Увеличил размер для лучшей видимости
+    program.setUniformValue("billboardSize", QVector2D(BILLBOARD_SIZE_X, BILLBOARD_SIZE_Y));
     program.setUniformValue("textTexture", 0);
 
     // Отрисовка
@@ -218,7 +226,7 @@ void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x
 
 QImage SatelliteInfoRenderer::createTextImage(const QString& text)
 {
-    QFont font("Arial", 12, QFont::Bold);  // Сделаем шрифт жирным для лучшей видимости
+    QFont font("Arial", 24, QFont::Bold);  // Увеличен размер шрифта
     QFontMetrics fm(font);
 
     // Учитываем переносы строк в тексте
@@ -232,13 +240,13 @@ QImage SatelliteInfoRenderer::createTextImage(const QString& text)
         totalHeight += bounds.height();
     }
 
-    // Добавляем отступы
-    maxWidth += 20;  // 10 пикселей с каждой стороны
-    totalHeight += 20 + (lines.count() - 1) * 5;  // Отступы сверху и снизу + междустрочный интервал
+    // Увеличиваем отступы и размер изображения
+    maxWidth += 40;  // Увеличенные отступы по бокам
+    totalHeight += 40 + (lines.count() - 1) * 10;  // Увеличенные отступы сверху и снизу
 
-    // Создаем изображение с прозрачным фоном
+    // Создаем изображение большего размера
     QImage image(maxWidth, totalHeight, QImage::Format_RGBA8888);
-    image.fill(Qt::transparent);
+    image.fill(QColor(0, 0, 0, 180));  // Полупрозрачный черный фон для лучшей читаемости
 
     QPainter painter(&image);
     painter.setFont(font);
@@ -246,13 +254,14 @@ QImage SatelliteInfoRenderer::createTextImage(const QString& text)
     painter.setRenderHint(QPainter::TextAntialiasing);
 
     // Рисуем текст
-    int y = 10;
+    int y = 20;  // Увеличенный отступ сверху
     for (const QString& line : lines) {
-        painter.drawText(10, y + fm.ascent(), line);
-        y += fm.height() + 5;  // Добавляем междустрочный интервал
+        painter.drawText(20, y + fm.ascent(), line);  // Увеличенный отступ слева
+        y += fm.height() + 10;  // Увеличенный междустрочный интервал
     }
 
     painter.end();
 
+    qDebug() << "Created texture size:" << image.size();
     return image;
 }

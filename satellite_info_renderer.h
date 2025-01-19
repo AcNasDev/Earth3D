@@ -32,8 +32,9 @@ private:
     QOpenGLTexture* texture;
     bool isInitialized;    // Добавлено
 
-    static constexpr float BILLBOARD_SIZE = 0.2f;
-    static constexpr float OFFSET = 0.3f;
+    static constexpr float BILLBOARD_SIZE_X = 1.0f;    // Увеличенная ширина
+    static constexpr float BILLBOARD_SIZE_Y = 0.5f;    // Увеличенная высота
+    static constexpr float OFFSET = 0.5f;             // Увеличенное смещение от спутника
 };
 
 #endif
