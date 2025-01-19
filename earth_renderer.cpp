@@ -90,7 +90,7 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("lightPos", cameraPos); // или другая позиция источника света
 
     // Важно! Установка масштаба высоты
-    program.setUniformValue("heightScale", 0.15f);
+    program.setUniformValue("heightScale", 0.05f);
 
     // Привязываем все текстуры один раз
     glActiveTexture(GL_TEXTURE0);

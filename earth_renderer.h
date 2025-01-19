@@ -22,8 +22,8 @@ private:
     void createSphere();
     void updateVisibleTiles(const QMatrix4x4& viewProjection);
 
-    static constexpr int RINGS = 64;     // Увеличено для лучшей детализации
-    static constexpr int SEGMENTS = 64;   // Увеличено для лучшей детализации
+    static constexpr int RINGS = 128;     // Увеличено для лучшей детализации
+    static constexpr int SEGMENTS = 128;   // Увеличено для лучшей детализации
 
     std::unique_ptr<TileTextureManager> earthTextureTiles;
     std::unique_ptr<TileTextureManager> heightMapTiles;

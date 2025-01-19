@@ -23,45 +23,66 @@ void TileTextureManager::initialize() {
         qWarning() << "Failed to load source image:" << imagePath;
         return;
     }
-    sourceImage = sourceImage.mirrored(true, false);
-    // sourceImage = sourceImage.scaled(4096, 4096);
 
-    // Создаем атлас текстур
+    // Если текстура слишком большая, разбиваем на более мелкие тайлы
+    int maxTextureSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxTextureSize);
+
+    // Определяем размер тайла, чтобы не превысить ограничения OpenGL
+    int tileWidth = std::min(sourceImage.width() / numSegments, maxTextureSize);
+    int tileHeight = std::min(sourceImage.height() / numRings, maxTextureSize);
+
+    // Создаем атлас с учетом максимального размера текстуры
     tilesPerRow = std::ceil(std::sqrt(numRings * numSegments));
-    int tileWidth = sourceImage.width() / numSegments;
-    int tileHeight = sourceImage.height() / numRings;
 
-    atlasSize = QSize(tileWidth * tilesPerRow, tileHeight * tilesPerRow);
+    // Убедимся, что размер атласа не превышает максимально допустимый
+    int atlasWidth = std::min(tileWidth * tilesPerRow, maxTextureSize);
+    int atlasHeight = std::min(tileHeight * tilesPerRow, maxTextureSize);
+
+    atlasSize = QSize(atlasWidth, atlasHeight);
     QImage atlasImage(atlasSize, QImage::Format_RGBA8888);
     atlasImage.fill(Qt::transparent);
 
-    // Заполняем атлас тайлами
+    // Масштабируем тайлы если нужно
+    float scaleX = float(atlasWidth) / (tileWidth * tilesPerRow);
+    float scaleY = float(atlasHeight) / (tileHeight * tilesPerRow);
+
     for (int ring = 0; ring < numRings; ++ring) {
         for (int segment = 0; segment < numSegments; ++segment) {
-            int atlasX = (ring * numSegments + segment) % tilesPerRow * tileWidth;
-            int atlasY = (ring * numSegments + segment) / tilesPerRow * tileHeight;
+            // Позиция в атласе
+            int atlasX = (ring * numSegments + segment) % tilesPerRow * (atlasWidth / tilesPerRow);
+            int atlasY = (ring * numSegments + segment) / tilesPerRow * (atlasHeight / tilesPerRow);
 
-            int sourceX = segment * tileWidth;
-            int sourceY = ring * tileHeight;
+            // Позиция в исходной текстуре
+            int sourceX = segment * (sourceImage.width() / numSegments);
+            int sourceY = ring * (sourceImage.height() / numRings);
 
-            // Копируем тайл в атлас
-            QRect sourceRect(sourceX, sourceY, tileWidth, tileHeight);
-            QRect targetRect(atlasX, atlasY, tileWidth, tileHeight);
+            // Размеры тайла в атласе
+            int currentTileWidth = atlasWidth / tilesPerRow;
+            int currentTileHeight = atlasHeight / tilesPerRow;
+
+            // Копируем и масштабируем тайл
+            QRect sourceRect(sourceX, sourceY,
+                             sourceImage.width() / numSegments,
+                             sourceImage.height() / numRings);
+            QRect targetRect(atlasX, atlasY, currentTileWidth, currentTileHeight);
+
             QPainter painter(&atlasImage);
+            painter.setRenderHint(QPainter::SmoothPixmapTransform);
             painter.drawImage(targetRect, sourceImage, sourceRect);
 
-            // Сохраняем UV-координаты тайла
+            // Сохраняем UV-координаты
             QRectF uvCoords(
                 float(atlasX) / atlasSize.width(),
                 float(atlasY) / atlasSize.height(),
-                float(tileWidth) / atlasSize.width(),
-                float(tileHeight) / atlasSize.height()
+                float(currentTileWidth) / atlasSize.width(),
+                float(currentTileHeight) / atlasSize.height()
                 );
             tileUVCoords.append(uvCoords);
         }
     }
 
-    // Создаем текстуру атласа
+    // Создаем текстуру атласа с правильными параметрами
     textureAtlas = new QOpenGLTexture(atlasImage);
     textureAtlas->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     textureAtlas->setMagnificationFilter(QOpenGLTexture::Linear);

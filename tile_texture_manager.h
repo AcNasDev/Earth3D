@@ -60,7 +60,7 @@ private:
 
     // Используем QCache для автоматического управления памятью
     QCache<TileCoords, Tile> tileCache;
-    static constexpr int MAX_CACHE_SIZE = 128; // В мегабайтах
+    static constexpr int MAX_CACHE_SIZE = 512; // В мегабайтах
 };
 
 #endif // TILE_TEXTURE_MANAGER_H
