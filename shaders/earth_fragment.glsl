@@ -8,57 +8,50 @@ in float Visibility;
 uniform sampler2D earthTexture;
 uniform sampler2D heightMap;
 uniform sampler2D normalMap;
-// Добавьте эти униформы в начало fragment shader
+uniform int numSegments;
+uniform int numRings;
 uniform float gridThickness;
 uniform vec4 gridColor;
-uniform int numSegments;  // SEGMENTS
-uniform int numRings;     // RINGS
 
 out vec4 FragColor;
 
 bool isOnGrid(vec2 uv) {
-    // Вычисляем количество сегментов в UV-пространстве
-    float segments = numSegments; // SEGMENTS
-    float rings = numRings;    // RINGS
+    // Преобразуем UV-координаты в координаты сетки
+    float segmentWidth = 1.0 / float(numSegments);
+    float ringHeight = 1.0 / float(numRings);
 
     // Вычисляем расстояние до ближайшей линии сетки
-    float segmentSpacing = 1.0 / segments;
-    float ringSpacing = 1.0 / rings;
+    vec2 gridPos = uv / vec2(segmentWidth, ringHeight);
+    vec2 gridFrac = fract(gridPos);
 
-    // Проверяем, находится ли точка рядом с линией сетки
-    float segmentDist = mod(uv.x, segmentSpacing);
-    float ringDist = mod(uv.y, ringSpacing);
+    // Определяем толщину линий
+    float thickness = gridThickness;
 
-    segmentDist = min(segmentDist, segmentSpacing - segmentDist);
-    ringDist = min(ringDist, ringSpacing - ringDist);
+    // Проверяем близость к линиям сетки
+    bool isVerticalLine = gridFrac.x < thickness || gridFrac.x > (1.0 - thickness);
+    bool isHorizontalLine = gridFrac.y < thickness || gridFrac.y > (1.0 - thickness);
 
-    return segmentDist < gridThickness || ringDist < gridThickness;
+    return isVerticalLine || isHorizontalLine;
 }
 
 void main()
 {
-    // Если фрагмент не принадлежит текущему сегменту, отбрасываем его
-    if (Visibility < 0.5) {
-        discard;
-    }
+    // Координаты тайла должны совпадать с сеткой
+    vec2 tileCoord = TexCoord;
 
     // Получаем цвет из текстуры
-    vec4 texColor = texture(earthTexture, TexCoord);
+    vec4 texColor = texture(earthTexture, tileCoord);
 
     // Базовое освещение
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     vec3 normal = normalize(WorldNormal);
-
-    float ambient = 0.2;
     float diffuse = max(dot(normal, lightDir), 0.0);
-
-    // Применяем освещение к цвету текстуры
+    vec3 ambient = vec3(0.2);
     vec3 finalColor = texColor.rgb * (ambient + diffuse);
 
-    // Проверяем, находится ли фрагмент на линии сетки
-    if (isOnGrid(TexCoord)) {
-        // Смешиваем цвет текстуры с цветом сетки
-        FragColor = mix(vec4(finalColor, 1.0), gridColor, gridColor.a);
+    // Отрисовка сетки
+    if (isOnGrid(tileCoord)) {
+        FragColor = vec4(gridColor.rgb, gridColor.a);
     } else {
         FragColor = vec4(finalColor, 1.0);
     }
