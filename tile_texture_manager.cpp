@@ -28,34 +28,40 @@ TileTextureManager::~TileTextureManager()
 
 void TileTextureManager::initialize()
 {
-    // Загружаем исходное изображение
+    // Загружаем изображение с проверкой формата
     sourceImage.load(imagePath);
     if (sourceImage.isNull()) {
         qWarning() << "Failed to load image:" << imagePath;
         return;
     }
 
-    // Получаем размеры оригинального изображения
-    originalSize = sourceImage.size();
+    // Проверяем и конвертируем формат всего изображения сразу
+    if (sourceImage.format() != QImage::Format_RGBA8888) {
+        qDebug() << "Converting image format from" << sourceImage.format() << "to RGBA8888";
+        sourceImage = sourceImage.convertToFormat(QImage::Format_RGBA8888);
+    }
 
-    // Вычисляем количество тайлов
+    originalSize = sourceImage.size();
     tilesX = (originalSize.width() + tileSize - 1) / tileSize;
     tilesY = (originalSize.height() + tileSize - 1) / tileSize;
 
-    qDebug() << "Initializing TileTextureManager:"
-             << "\nImage path:" << imagePath
-             << "\nOriginal size:" << originalSize
-             << "\nTile size:" << tileSize
+    qDebug() << "TileTextureManager initialized:"
+             << "\nImage:" << imagePath
+             << "\nSize:" << originalSize
+             << "\nFormat:" << sourceImage.format()
              << "\nTiles:" << tilesX << "x" << tilesY;
 
     // Предварительно вычисляем информацию о тайлах
     tilesInfo.clear();
+    tilesInfo.reserve(tilesX * tilesY); // Резервируем память
     for (int y = 0; y < tilesY; ++y) {
         for (int x = 0; x < tilesX; ++x) {
-            QPoint tilePos(x, y);
-            tilesInfo.append(calculateTileInfo(tilePos));
+            tilesInfo.append(calculateTileInfo(QPoint(x, y)));
         }
     }
+
+    // Устанавливаем размер кэша
+    tileCache.setMaxCost(tilesX * tilesY);
 }
 
 void TileTextureManager::initializeTiles()
@@ -76,10 +82,9 @@ void TileTextureManager::initializeTiles()
 
 void TileTextureManager::loadTile(int x, int y)
 {
-    // QMutexLocker locker(&cacheMutex);
+    QMutexLocker locker(&cacheMutex);
     QPoint tilePos(x, y);
 
-    // Проверяем, не загружен ли уже тайл
     if (tileCache.contains(tilePos)) {
         return;
     }
@@ -88,35 +93,63 @@ void TileTextureManager::loadTile(int x, int y)
     int currentTileWidth = qMin(tileSize, originalSize.width() - x * tileSize);
     int currentTileHeight = qMin(tileSize, originalSize.height() - y * tileSize);
 
-    // Вырезаем участок изображения для тайла
     QRect region(x * tileSize, y * tileSize, currentTileWidth, currentTileHeight);
-    QImage tileImage = sourceImage.copy(region);
 
-    qDebug() << "Loading tile at" << x << y
-             << "\nRegion:" << region
-             << "\nTile size:" << tileImage.size();
-
-    // Создаем и настраиваем текстуру
+    // Создаем текстуру перед копированием изображения
     QOpenGLTexture* texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
-    texture->setFormat(QOpenGLTexture::RGBA8_UNorm);
-    texture->setSize(tileImage.width(), tileImage.height());
-    texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-    texture->setMagnificationFilter(QOpenGLTexture::Linear);
-    texture->setWrapMode(QOpenGLTexture::ClampToEdge);
-    texture->setAutoMipMapGenerationEnabled(true);
 
-    // Конвертируем изображение в RGBA8888 если нужно
-    if (tileImage.format() != QImage::Format_RGBA8888) {
-        tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
+    try {
+        // Проверяем формат исходного изображения
+        QImage::Format desiredFormat = QImage::Format_RGBA8888;
+        QImage tileImage;
+
+        if (sourceImage.format() != desiredFormat) {
+            // Конвертируем только нужный регион
+            tileImage = sourceImage.copy(region).convertToFormat(desiredFormat);
+        } else {
+            tileImage = sourceImage.copy(region);
+        }
+
+        // Проверяем успешность создания тайла
+        if (tileImage.isNull()) {
+            qWarning() << "Failed to create tile image at" << x << y;
+            delete texture;
+            return;
+        }
+
+        // Настраиваем текстуру
+        texture->setFormat(QOpenGLTexture::RGBA8_UNorm);
+        texture->setSize(tileImage.width(), tileImage.height());
+        texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        texture->setMagnificationFilter(QOpenGLTexture::Linear);
+        texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+        texture->setAutoMipMapGenerationEnabled(true);
+
+        // Выделяем память и загружаем данные
+        texture->allocateStorage();
+        texture->setData(
+            0, // уровень мипмапа
+            0, // слой
+            QOpenGLTexture::RGBA,
+            QOpenGLTexture::UInt8,
+            tileImage.constBits(),
+            nullptr // настройки
+            );
+
+        // Генерируем мипмапы после загрузки данных
+        texture->generateMipMaps();
+
+        // Добавляем в кэш только если всё успешно
+        tileCache.insert(tilePos, texture);
+
+        qDebug() << "Successfully loaded tile" << tilePos
+                 << "Size:" << tileImage.size()
+                 << "Format:" << tileImage.format();
+
+    } catch (const std::exception& e) {
+        qWarning() << "Exception while loading tile" << tilePos << ":" << e.what();
+        delete texture;
     }
-
-    // Выделяем память и загружаем данные
-    texture->allocateStorage();
-    texture->setData(QOpenGLTexture::RGBA, QOpenGLTexture::UInt8, tileImage.constBits());
-    texture->generateMipMaps();
-
-    // Добавляем в кэш
-    tileCache.insert(tilePos, texture);
 }
 
 QPoint TileTextureManager::texCoordToTile(const QVector2D& texCoord)
@@ -217,22 +250,18 @@ QVector<QVector4D> TileTextureManager::getAllTilesInfo() const
 
 void TileTextureManager::bindAllTiles()
 {
-    // QMutexLocker locker(&cacheMutex);
+    QMutexLocker locker(&cacheMutex);
 
-    // Проверяем, все ли тайлы загружены
-    for (int y = 0; y < tilesY; ++y) {
-        for (int x = 0; x < tilesX; ++x) {
-            QPoint tilePos(x, y);
-            if (!tileCache.contains(tilePos)) {
-                loadTile(x, y);
-            }
-        }
+    // Проверяем есть ли хотя бы один тайл
+    if (tilesX <= 0 || tilesY <= 0) {
+        qWarning() << "No tiles to bind";
+        return;
     }
 
-    // Привязываем первый тайл (остальные будут использовать те же текстурные координаты)
-    if (tilesX > 0 && tilesY > 0) {
-        QPoint firstTilePos(0, 0);
-        QOpenGLTexture* texture = tileCache.object(firstTilePos);
+    // Привязываем текущий тайл (мы не должны загружать тайлы в этом методе)
+    QPoint currentTilePos(0, 0);
+    if (tileCache.contains(currentTilePos)) {
+        QOpenGLTexture* texture = tileCache.object(currentTilePos);
         if (texture) {
             texture->bind();
         }
