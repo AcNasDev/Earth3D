@@ -59,7 +59,6 @@ void TileTextureManager::loadTile(int x, int y)
     QMutexLocker locker(&cacheMutex);
     QPoint tilePos(x, y);
 
-    // Проверяем кэш
     if (tileCache.contains(tilePos)) {
         return;
     }
@@ -68,17 +67,76 @@ void TileTextureManager::loadTile(int x, int y)
     QRect region = tiles[y * tilesX + x].region;
     QImage tileImage = sourceImage.copy(region);
 
-    // Создаем текстуру
+    if (tileImage.isNull()) {
+        qDebug() << "Failed to create tile image at" << x << y;
+        return;
+    }
+
+    // Определяем формат текстуры на основе формата изображения
+    QOpenGLTexture::TextureFormat textureFormat;
+    QOpenGLTexture::PixelFormat pixelFormat;
+    QOpenGLTexture::PixelType pixelType;
+
+    switch (tileImage.format()) {
+    case QImage::Format_RGB888:
+        textureFormat = QOpenGLTexture::RGB8_UNorm;
+        pixelFormat = QOpenGLTexture::RGB;
+        pixelType = QOpenGLTexture::UInt8;
+        break;
+    case QImage::Format_RGBA8888:
+        textureFormat = QOpenGLTexture::RGBA8_UNorm;
+        pixelFormat = QOpenGLTexture::RGBA;
+        pixelType = QOpenGLTexture::UInt8;
+        break;
+    case QImage::Format_RGB32:
+    case QImage::Format_ARGB32:
+        tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
+        textureFormat = QOpenGLTexture::RGBA8_UNorm;
+        pixelFormat = QOpenGLTexture::RGBA;
+        pixelType = QOpenGLTexture::UInt8;
+        break;
+    default:
+        // Для других форматов конвертируем в RGBA8888
+        tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
+        textureFormat = QOpenGLTexture::RGBA8_UNorm;
+        pixelFormat = QOpenGLTexture::RGBA;
+        pixelType = QOpenGLTexture::UInt8;
+        break;
+    }
+
     QOpenGLTexture* texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
+    texture->setFormat(textureFormat);
     texture->setSize(tileImage.width(), tileImage.height());
-    texture->setFormat(QOpenGLTexture::RGBA8_UNorm);
+
+    // Устанавливаем параметры фильтрации
     texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
     texture->setMagnificationFilter(QOpenGLTexture::Linear);
     texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+
+    // Выделяем память с учетом формата
     texture->allocateStorage();
-    texture->setData(QOpenGLTexture::RGBA, QOpenGLTexture::UInt8, tileImage.bits());
+
+    qDebug() << "Loading tile at" << x << y
+             << "\nImage format:" << tileImage.format()
+             << "\nSize:" << tileImage.size()
+             << "\nBytes per line:" << tileImage.bytesPerLine()
+             << "\nDepth:" << tileImage.depth()
+             << "\nTexture format:" << textureFormat
+             << "\nPixel format:" << pixelFormat
+             << "\nPixel type:" << pixelType;
+
+    // Загружаем данные в текстуру
+    texture->setData(
+        pixelFormat,
+        pixelType,
+        tileImage.constBits(),
+        nullptr  // Опции загрузки
+        );
+
+    // Генерируем мипмапы
     texture->generateMipMaps();
 
+    // Добавляем в кэш
     tileCache.insert(tilePos, texture);
 }
 
