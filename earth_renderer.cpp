@@ -56,58 +56,46 @@ void EarthRenderer::createSphere()
     vertices.clear();
     indices.clear();
 
-    // Для отладки
-    qDebug() << "Creating sphere with RINGS:" << RINGS << "SEGMENTS:" << SEGMENTS;
-
     for (int ring = 0; ring <= RINGS; ++ring) {
         float phi = ring * M_PI / RINGS;
-        // Текстурная координата V (от 0 до 1)
         float v = static_cast<float>(ring) / RINGS;
 
         for (int segment = 0; segment <= SEGMENTS; ++segment) {
             float theta = segment * 2.0f * M_PI / SEGMENTS;
-            // Текстурная координата U (от 0 до 1)
-            float u = static_cast<float>(segment) / SEGMENTS;
+            float u = 1.0f - static_cast<float>(segment) / SEGMENTS;
 
-            // Вычисляем позицию
-            float x = sin(phi) * cos(theta) * radius;
-            float y = cos(phi) * radius;
-            float z = sin(phi) * sin(theta) * radius;
+            // Позиция
+            QVector3D pos(
+                sin(phi) * cos(theta) * radius,
+                cos(phi) * radius,
+                sin(phi) * sin(theta) * radius
+                );
 
-            // Создаем вершину
+            // Нормаль
+            QVector3D normal(
+                sin(phi) * cos(theta),
+                cos(phi),
+                sin(phi) * sin(theta)
+                );
+
             Vertex vertex;
-            vertex.position = QVector3D(x, y, z);
-            vertex.normal = vertex.position.normalized();
+            vertex.position = pos;
             vertex.texCoord = QVector2D(u, v);
+            vertex.normal = normal;
             vertex.segmentIndex = QVector2D(ring, segment);
 
             vertices.append(vertex);
-
-            // Отладочный вывод для первых нескольких вершин
-            if (ring <= 1 && segment <= 1) {
-                qDebug() << "Vertex" << ring << segment
-                         << "pos:" << vertex.position
-                         << "uv:" << vertex.texCoord
-                         << "segmentIndex:" << vertex.segmentIndex;
-            }
         }
     }
 
     // Генерация индексов
     for (int ring = 0; ring < RINGS; ++ring) {
         for (int segment = 0; segment < SEGMENTS; ++segment) {
-            int current = ring * (SEGMENTS + 1) + segment;
-            int next = current + SEGMENTS + 1;
+            GLuint current = ring * (SEGMENTS + 1) + segment;
+            GLuint next = current + SEGMENTS + 1;
 
-            // Первый треугольник
-            indices.append(current);
-            indices.append(next);
-            indices.append(current + 1);
-
-            // Второй треугольник
-            indices.append(current + 1);
-            indices.append(next);
-            indices.append(next + 1);
+            indices << current << current + 1 << next;
+            indices << next << current + 1 << next + 1;
         }
     }
 
