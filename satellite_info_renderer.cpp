@@ -46,24 +46,32 @@ bool SatelliteInfoRenderer::initShaders()
 {
     // Vertex shader
     const char* vertexShaderSource = R"(
-        #version 330 core
-        layout(location = 0) in vec3 position;
-        layout(location = 1) in vec2 texCoord;
+    #version 330 core
+    layout(location = 0) in vec3 position;
+    layout(location = 1) in vec2 texCoord;
 
-        uniform mat4 mvp;
-        uniform vec3 billboardPos;
-        uniform vec2 billboardSize;
+    uniform mat4 mvp;
+    uniform vec3 billboardPos;
+    uniform vec2 billboardSize;
 
-        out vec2 TexCoord;
+    out vec2 TexCoord;
 
-        void main()
-        {
-            vec3 pos = billboardPos + vec3(position.x * billboardSize.x,
-                                         position.y * billboardSize.y, 0.0);
-            gl_Position = mvp * vec4(pos, 1.0);
-            TexCoord = texCoord;
-        }
-    )";
+    void main()
+    {
+        // Извлекаем только часть с поворотом и позицией из MVP матрицы
+        mat4 modelView = mvp;
+        modelView[0][0] = 1.0; modelView[0][1] = 0.0; modelView[0][2] = 0.0;
+        modelView[1][0] = 0.0; modelView[1][1] = 1.0; modelView[1][2] = 0.0;
+        modelView[2][0] = 0.0; modelView[2][1] = 0.0; modelView[2][2] = 1.0;
+
+        // Создаем позицию вершины в пространстве экрана
+        vec4 pos = modelView * vec4(billboardPos, 1.0);
+        pos.xy += position.xy * billboardSize;
+        gl_Position = pos;
+
+        TexCoord = texCoord;
+    }
+)";
 
     // Fragment shader
     const char* fragmentShaderSource = R"(
@@ -142,8 +150,11 @@ bool SatelliteInfoRenderer::initGeometry()
 
 void SatelliteInfoRenderer::updateInfoTexture(const Satellite& satellite)
 {
+    qDebug() << "Updating info texture for satellite ID:" << satellite.id;
     QString info = QString("ID: %1\n%2").arg(satellite.id).arg(satellite.info);
     QImage textImage = createTextImage(info);
+
+    qDebug() << "Created text image size:" << textImage.size();
 
     if (texture) {
         texture->destroy();
@@ -161,12 +172,14 @@ void SatelliteInfoRenderer::updateInfoTexture(const Satellite& satellite)
     texture->setMinificationFilter(QOpenGLTexture::Linear);
     texture->setMagnificationFilter(QOpenGLTexture::Linear);
     texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+    qDebug() << "Successfully created texture";
 }
 
 void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
                                    const QMatrix4x4& model, const Satellite& satellite)
 {
     if (!isInitialized || !texture) {
+        qDebug() << "Not initialized or no texture";
         return;
     }
 
@@ -174,23 +187,28 @@ void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x
     vao.bind();
     texture->bind();
 
-    // Вычисляем позицию billboard'а
-    QVector3D offsetPos = satellite.position + QVector3D(0.0f, OFFSET, 0.0f);
-
-    // Устанавливаем униформы
-    program.setUniformValue("mvp", projection * view * model);
-    program.setUniformValue("billboardPos", offsetPos);
-    program.setUniformValue("billboardSize", QVector2D(BILLBOARD_SIZE, BILLBOARD_SIZE));
-    program.setUniformValue("textTexture", 0);
+    // Отключаем тест глубины чтобы текст всегда был видим
+    glDisable(GL_DEPTH_TEST);
 
     // Включаем прозрачность
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
+    // Вычисляем позицию billboard'а с небольшим смещением вверх
+    QVector3D offsetPos = satellite.position + QVector3D(0.0f, OFFSET, 0.0f);
+
+    // Устанавливаем униформы
+    QMatrix4x4 mvp = projection * view * model;
+    program.setUniformValue("mvp", mvp);
+    program.setUniformValue("billboardPos", offsetPos);
+    program.setUniformValue("billboardSize", QVector2D(BILLBOARD_SIZE * 2.0f, BILLBOARD_SIZE));  // Увеличил размер для лучшей видимости
+    program.setUniformValue("textTexture", 0);
+
     // Отрисовка
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
 
-    // Отключаем прозрачность
+    // Восстанавливаем состояние OpenGL
+    glEnable(GL_DEPTH_TEST);
     glDisable(GL_BLEND);
 
     texture->release();

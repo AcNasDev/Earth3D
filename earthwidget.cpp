@@ -264,15 +264,14 @@ int EarthWidget::pickSatellite(const QPoint& mousePos)
 
     if (closestSatelliteId != -1) {
         selectedSatelliteId = closestSatelliteId;
-        // Обновляем текстуру с информацией о спутнике
         if (satellites.contains(selectedSatelliteId)) {
+            qDebug() << "Selected satellite ID:" << selectedSatelliteId;
             satelliteInfoRenderer->updateInfoTexture(satellites[selectedSatelliteId]);
         }
     } else {
         selectedSatelliteId = -1;
     }
 
-    emit satelliteSelected(closestSatelliteId);
-    return closestSatelliteId;
+    update();  // Убедитесь, что это вызывается
     return closestSatelliteId;
 }
