@@ -1,200 +1,187 @@
+// tile_texture_manager.cpp
 #include "tile_texture_manager.h"
 #include <QImage>
 #include <QtMath>
+#include <QDebug>
+#include <qpainter.h>
 
-TileTextureManager::TileTextureManager(const QString& path, int _numRings, int _numSegments)
+TileTextureManager::TileTextureManager(const QString& path, int rings, int segments)
     : imagePath(path)
-    , numRings(_numRings)
-    , numSegments(_numSegments)
+    , numRings(rings)
+    , numSegments(segments)
+    , textureAtlas(nullptr)
 {
     initializeOpenGLFunctions();
 }
 
-TileTextureManager::~TileTextureManager()
-{
-    // Удаляем все загруженные текстуры
-    for (const auto& tile : tiles) {
-        if (tile.isLoaded) {
-            glDeleteTextures(1, &tile.textureId);
-        }
-    }
+TileTextureManager::~TileTextureManager() {
 }
 
-void TileTextureManager::initialize()
-{
-    // Загружаем изображение
-    sourceImage.load(imagePath);
-
+void TileTextureManager::initialize() {
+    QImage sourceImage(imagePath);
     if (sourceImage.isNull()) {
-        qDebug() << "Failed to load image:" << imagePath;
+        qWarning() << "Failed to load source image:" << imagePath;
         return;
     }
 
-    // Проверяем формат и конвертируем если нужно
-    if (sourceImage.format() != QImage::Format_RGBA8888) {
-        qDebug() << "Converting image from format" << sourceImage.format()
-        << "to Format_RGBA8888";
-        sourceImage = sourceImage.convertToFormat(QImage::Format_RGBA8888);
-    }
+    // Создаем атлас текстур
+    tilesPerRow = std::ceil(std::sqrt(numRings * numSegments));
+    int tileWidth = sourceImage.width() / numSegments;
+    int tileHeight = sourceImage.height() / numRings;
 
+    atlasSize = QSize(tileWidth * tilesPerRow, tileHeight * tilesPerRow);
+    QImage atlasImage(atlasSize, QImage::Format_RGBA8888);
+    atlasImage.fill(Qt::transparent);
+
+    // Заполняем атлас тайлами
     for (int ring = 0; ring < numRings; ++ring) {
         for (int segment = 0; segment < numSegments; ++segment) {
-            loadTile(ring, segment);
+            int atlasX = (ring * numSegments + segment) % tilesPerRow * tileWidth;
+            int atlasY = (ring * numSegments + segment) / tilesPerRow * tileHeight;
+
+            int sourceX = segment * tileWidth;
+            int sourceY = ring * tileHeight;
+
+            // Копируем тайл в атлас
+            QRect sourceRect(sourceX, sourceY, tileWidth, tileHeight);
+            QRect targetRect(atlasX, atlasY, tileWidth, tileHeight);
+            QPainter painter(&atlasImage);
+            painter.drawImage(targetRect, sourceImage, sourceRect);
+
+            // Сохраняем UV-координаты тайла
+            QRectF uvCoords(
+                float(atlasX) / atlasSize.width(),
+                float(atlasY) / atlasSize.height(),
+                float(tileWidth) / atlasSize.width(),
+                float(tileHeight) / atlasSize.height()
+                );
+            tileUVCoords.append(uvCoords);
         }
     }
+
+    // Создаем текстуру атласа
+    textureAtlas = new QOpenGLTexture(atlasImage);
+    textureAtlas->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    textureAtlas->setMagnificationFilter(QOpenGLTexture::Linear);
+    textureAtlas->setWrapMode(QOpenGLTexture::ClampToEdge);
+    textureAtlas->generateMipMaps();
 }
 
-
-
-bool TileTextureManager::isTileLoaded(int ring, int segment)
-{
-    return tiles.contains({ring, segment});
+bool TileTextureManager::bindTileTexture(int ring, int segment) {
+    if (!textureAtlas) return false;
+    textureAtlas->bind();
+    return true;
 }
 
-void TileTextureManager::loadTile(int ring, int segment)
-{
-    if (sourceImage.isNull()) {
-        qDebug() << "Source image is null!";
-        return;
-    }
+const QRectF& TileTextureManager::getTileUVCoords(int ring, int segment) {
+    int index = ring * numSegments + segment;
+    return tileUVCoords[index];
+}
 
-    // Вычисляем границы тайла в UV-координатах
-    float u1 = static_cast<float>(segment) / numSegments;
-    float u2 = static_cast<float>(segment + 1) / numSegments;
-    float v1 = static_cast<float>(ring) / numRings;
-    float v2 = static_cast<float>(ring + 1) / numRings;
+void TileTextureManager::loadTile(const TileCoords& coords) {
+    QRectF uvCoords, sphereCoords;
+    calculateTileCoordinates(coords, uvCoords, sphereCoords);
 
-    // Вычисляем границы в пикселях
-    int x = u1 * sourceImage.width();
-    int y = v1 * sourceImage.height();
-    int width = (u2 - u1) * sourceImage.width();
-    int height = (v2 - v1) * sourceImage.height();
-
-    qDebug() << "Creating tile" << ring << segment
-             << "from" << QRect(x, y, width, height);
+    // Вычисляем размеры и позицию тайла в исходном изображении
+    int x = uvCoords.x() * sourceImage.width();
+    int y = uvCoords.y() * sourceImage.height();
+    int width = uvCoords.width() * sourceImage.width();
+    int height = uvCoords.height() * sourceImage.height();
 
     // Вырезаем участок изображения для тайла
     QImage tileImage = sourceImage.copy(x, y, width, height);
 
-    // Создаем текстуру
-    GLuint textureId;
-    glGenTextures(1, &textureId);
-    glBindTexture(GL_TEXTURE_2D, textureId);
+    auto tile = new Tile();
+    tile->texture = std::make_unique<QOpenGLTexture>(tileImage.mirrored());
+    tile->texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+    tile->texture->setMagnificationFilter(QOpenGLTexture::Linear);
+    tile->texture->setWrapMode(QOpenGLTexture::ClampToEdge);
+    tile->uvCoords = uvCoords;
+    tile->sphereCoords = sphereCoords;
+    tile->isLoaded = true;
 
-    // Параметры текстуры
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    // Загружаем данные текстуры
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 tileImage.width(), tileImage.height(), 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, tileImage.constBits());
-
-    // Сохраняем информацию о тайле
-    Tile tile;
-    tile.textureId = textureId;
-    tile.image = tileImage;
-    tile.isLoaded = true;
-    tile.texCoords = QRectF(u1, v1, u2 - u1, v2 - v1);
-
-    tiles.insert({ring, segment}, tile);
-
-    qDebug() << "Tile" << ring << segment << "created with ID" << textureId;
+    // Размер в мегабайтах (приблизительно)
+    int tileSizeMB = (width * height * 4) / (1024 * 1024);
+    tileCache.insert(coords, tile, tileSizeMB);
 }
 
-void TileTextureManager::unloadTile(int ring, int segment)
-{
-    auto it = tiles.find({ring, segment});
-    if (it != tiles.end() && it.value().isLoaded) {
-        glDeleteTextures(1, &it.value().textureId);
-        tiles.remove({ring, segment});
+void TileTextureManager::calculateTileCoordinates(const TileCoords& coords, QRectF& uvCoords, QRectF& sphereCoords) const {
+    // UV координаты
+    float u1 = static_cast<float>(coords.segment) / numSegments;
+    float u2 = static_cast<float>(coords.segment + 1) / numSegments;
+    float v1 = static_cast<float>(coords.ring) / numRings;
+    float v2 = static_cast<float>(coords.ring + 1) / numRings;
+    uvCoords = QRectF(u1, v1, u2 - u1, v2 - v1);
+
+    // Сферические координаты
+    float phi1 = v1 * M_PI;
+    float phi2 = v2 * M_PI;
+    float theta1 = u1 * 2.0f * M_PI;
+    float theta2 = u2 * 2.0f * M_PI;
+    sphereCoords = QRectF(phi1, theta1, phi2 - phi1, theta2 - theta1);
+}
+
+void TileTextureManager::updateVisibleTiles(const QMatrix4x4& viewProjection) {
+    QSet<TileCoords> visibleTiles;
+
+    // Определяем видимые тайлы
+    for (int ring = 0; ring < numRings; ++ring) {
+        for (int segment = 0; segment < numSegments; ++segment) {
+            TileCoords coords{ring, segment};
+            QRectF uvCoords, sphereCoords;
+            calculateTileCoordinates(coords, uvCoords, sphereCoords);
+
+            if (isTileVisible(sphereCoords, viewProjection)) {
+                visibleTiles.insert(coords);
+                // Предзагружаем тайл если его нет в кэше
+                if (!tileCache.contains(coords)) {
+                    loadTile(coords);
+                }
+            }
+        }
+    }
+
+    // Удаляем невидимые тайлы из кэша
+    QList<TileCoords> cachedTiles = tileCache.keys();
+    for (const TileCoords& coords : cachedTiles) {
+        if (!visibleTiles.contains(coords)) {
+            tileCache.remove(coords);
+        }
     }
 }
 
-QRectF TileTextureManager::calculateTileBounds(int ring, int segment) const
-{
-    // Вычисляем UV-координаты тайла
-    float u1 = static_cast<float>(segment) / segment;
-    float u2 = static_cast<float>(segment + 1) / segment;
-    float v1 = static_cast<float>(ring) / ring;
-    float v2 = static_cast<float>(ring + 1) / ring;
-
-    return QRectF(QPointF(u1, v1), QPointF(u2, v2));
-}
-
-bool TileTextureManager::isTileInViewFrustum(const QRectF& bounds, const QMatrix4x4& viewProjection) const
-{
+bool TileTextureManager::isTileVisible(const QRectF& sphereCoords, const QMatrix4x4& viewProjection) const {
     // Создаем 8 угловых точек для сферического сегмента
+    const float radius = 1.0f; // Единичная сфера
     QVector<QVector3D> corners;
 
-    // Конвертируем UV координаты в сферические координаты
-    float phi1 = bounds.top() * M_PI;        // Начальная широта
-    float phi2 = bounds.bottom() * M_PI;     // Конечная широта
-    float theta1 = bounds.left() * 2 * M_PI; // Начальная долгота
-    float theta2 = bounds.right() * 2 * M_PI;// Конечная долгота
+    float phi1 = sphereCoords.x();
+    float phi2 = sphereCoords.x() + sphereCoords.height();
+    float theta1 = sphereCoords.y();
+    float theta2 = sphereCoords.y() + sphereCoords.width();
 
-    // Генерируем 8 угловых точек сегмента сферы
+    // Генерируем угловые точки
     for (float phi : {phi1, phi2}) {
         for (float theta : {theta1, theta2}) {
-            // Внутренняя точка (на поверхности сферы)
-            float x = sin(phi) * cos(theta);
-            float y = cos(phi);
-            float z = sin(phi) * sin(theta);
+            float x = radius * sin(phi) * cos(theta);
+            float y = radius * cos(phi);
+            float z = radius * sin(phi) * sin(theta);
             corners.append(QVector3D(x, y, z));
-
-            // Внешняя точка (с учетом высоты рельефа)
-            const float heightScale = 0.1f; // Максимальная высота рельефа (10% от радиуса)
-            corners.append(QVector3D(x * (1.0f + heightScale),
-                                     y * (1.0f + heightScale),
-                                     z * (1.0f + heightScale)));
         }
     }
 
-    // Проверяем, находится ли хотя бы одна точка в видимой области
-    for (const auto& corner : corners) {
+    // Проверяем, находится ли хотя бы одна точка в пределах пирамиды видимости
+    for (const QVector3D& corner : corners) {
         QVector4D clipSpace = viewProjection * QVector4D(corner, 1.0f);
-
-        // Проверка на w == 0 для предотвращения деления на ноль
-        if (qFuzzyIsNull(clipSpace.w())) {
-            continue;
-        }
-
-        // Нормализация в clip space
-        clipSpace /= clipSpace.w();
-
-        // Если хотя бы одна точка находится в видимом объеме ([-1,1] для всех координат),
-        // считаем тайл видимым
-        if (clipSpace.x() >= -1.0f && clipSpace.x() <= 1.0f &&
-            clipSpace.y() >= -1.0f && clipSpace.y() <= 1.0f &&
-            clipSpace.z() >= -1.0f && clipSpace.z() <= 1.0f) {
-            return true;
+        if (clipSpace.w() != 0) {
+            QVector3D ndc = QVector3D(clipSpace.x(), clipSpace.y(), clipSpace.z()) / clipSpace.w();
+            if (ndc.x() >= -1.0f && ndc.x() <= 1.0f &&
+                ndc.y() >= -1.0f && ndc.y() <= 1.0f &&
+                ndc.z() >= -1.0f && ndc.z() <= 1.0f) {
+                return true;
+            }
         }
     }
 
-    // Дополнительная проверка для случая, когда камера находится внутри сегмента
-    QVector3D cameraPos = viewProjection.inverted().column(3).toVector3D();
-    QVector3D segmentCenter = QVector3D(
-        sin((phi1 + phi2) * 0.5f) * cos((theta1 + theta2) * 0.5f),
-        cos((phi1 + phi2) * 0.5f),
-        sin((phi1 + phi2) * 0.5f) * sin((theta1 + theta2) * 0.5f)
-        );
-
-    float distanceToCamera = (cameraPos - segmentCenter).length();
-    if (distanceToCamera < 1.2f) { // Немного больше радиуса сферы для учета высоты рельефа
-        return true;
-    }
-
-    return false;
-}
-
-bool TileTextureManager::bindTileForSegment(int ring, int segment)
-{
-    auto it = tiles.find({ring, segment});
-    if (it != tiles.end() && it.value().isLoaded) {
-        glBindTexture(GL_TEXTURE_2D, it.value().textureId);
-        return true;
-    }
     return false;
 }

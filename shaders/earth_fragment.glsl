@@ -1,30 +1,51 @@
 #version 330 core
 
-in vec2 TexCoord;
-in vec3 WorldPos;
-in vec3 WorldNormal;
-in float Visibility;
+in vec2 vTexCoord;
+in vec3 vNormal;
+in vec3 vFragPos;
+flat in vec2 vTileCoord;
+
+out vec4 fragColor;
 
 uniform sampler2D earthTexture;
+uniform sampler2D heightMap;
+uniform sampler2D normalMap;
 
-out vec4 FragColor;
+// Параметры освещения
+uniform vec3 lightPos = vec3(100.0, 100.0, 100.0);
+uniform vec3 viewPos;
+uniform float ambientStrength = 0.1;
+uniform float specularStrength = 0.5;
+uniform float shininess = 32.0;
 
-void main()
-{
-    if (Visibility < 0.5) {
-        discard;
-    }
+void main() {
+    // Получаем цвет из текстуры
+    vec4 texColor = texture(earthTexture, vTexCoord);
+    float height = texture(heightMap, vTexCoord).r;
+    vec3 normalMap = normalize(texture(normalMap, vTexCoord).rgb * 2.0 - 1.0);
 
-    // Сэмплируем текстуру
-    vec4 texColor = texture(earthTexture, TexCoord);
+    // Комбинируем нормаль из карты нормалей с геометрической нормалью
+    vec3 N = normalize(vNormal + normalMap);
 
-    // Базовое освещение
-    vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
-    vec3 normal = normalize(WorldNormal);
-    float diff = max(dot(normal, lightDir), 0.0);
+    // Расчет освещения
+    vec3 lightDir = normalize(lightPos - vFragPos);
+    vec3 viewDir = normalize(viewPos - vFragPos);
+    vec3 reflectDir = reflect(-lightDir, N);
 
-    vec3 ambient = texColor.rgb * 0.2;
-    vec3 diffuse = texColor.rgb * diff;
+    // Ambient
+    vec3 ambient = ambientStrength * texColor.rgb;
 
-    FragColor = vec4(ambient + diffuse, 1.0);
+    // Diffuse
+    float diff = max(dot(N, lightDir), 0.0);
+    vec3 diffuse = diff * texColor.rgb;
+
+    // Specular
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);
+    vec3 specular = specularStrength * spec * vec3(1.0);
+
+    // Добавляем эффект высоты
+    vec3 color = (ambient + diffuse + specular);
+    color *= (1.0 + height * 0.1); // Увеличиваем яркость на возвышенностях
+
+    fragColor = vec4(color, texColor.a);
 }

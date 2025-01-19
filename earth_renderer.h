@@ -1,3 +1,4 @@
+// earth_renderer.h
 #ifndef EARTH_RENDERER_H
 #define EARTH_RENDERER_H
 
@@ -19,37 +20,32 @@ private:
     void initTextures();
     void initGeometry();
     void createSphere();
-    GLint getMaxTextureSize();
+    void updateVisibleTiles(const QMatrix4x4& viewProjection);
 
-    // Константы
-    static constexpr int RINGS = 8;
-    static constexpr int SEGMENTS = 8;
+    static constexpr int RINGS = 64;     // Увеличено для лучшей детализации
+    static constexpr int SEGMENTS = 64;   // Увеличено для лучшей детализации
 
-    // Менеджеры текстур
-    TileTextureManager* earthTextureTiles;
-    TileTextureManager* heightMapTiles;
-    TileTextureManager* normalMapTiles;
+    std::unique_ptr<TileTextureManager> earthTextureTiles;
+    std::unique_ptr<TileTextureManager> heightMapTiles;
+    std::unique_ptr<TileTextureManager> normalMapTiles;
 
-    // Буферы OpenGL
-    QOpenGLBuffer indexBuffer;
     float radius;
+
     struct Vertex {
         QVector3D position;
         QVector2D texCoord;
         QVector3D normal;
-        QVector2D segmentIndex;  // (ring, segment)
+        QVector2D tileCoord;  // Координаты тайла (ring, segment)
     };
-
 
     QOpenGLVertexArrayObject vao;
     QOpenGLBuffer vbo{QOpenGLBuffer::VertexBuffer};
     QOpenGLBuffer ibo{QOpenGLBuffer::IndexBuffer};
-    int vertexCount{0};
 
     QVector<Vertex> vertices;
     QVector<GLuint> indices;
-    QVector3D sphericalToCartesian(float radius, float phi, float theta);
-    void updateBuffers();
+
+    QVector3D sphericalToCartesian(float radius, float phi, float theta) const;
 };
 
 #endif // EARTH_RENDERER_H

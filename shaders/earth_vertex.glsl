@@ -1,33 +1,28 @@
 #version 330 core
 
-layout(location = 0) in vec3 position;
-layout(location = 1) in vec2 texCoord;
-layout(location = 2) in vec3 normal;
-layout(location = 3) in vec2 segmentIndex;
+in vec3 position;
+in vec2 texCoord;
+in vec3 normal;
+in vec2 tileCoord;
 
-uniform mat4 mvp;
-uniform mat4 model;
-uniform mat3 normalMatrix;
-uniform int currentRing;
-uniform int currentSegment;
+out vec2 vTexCoord;
+out vec3 vNormal;
+out vec3 vFragPos;
+flat out vec2 vTileCoord;
 
-out vec2 TexCoord;
-out vec3 WorldPos;
-out vec3 WorldNormal;
-out float Visibility;
+uniform mat4 projectionMatrix;
+uniform mat4 viewMatrix;
+uniform mat4 modelMatrix;
 
-void main()
-{
-    // Проверяем, принадлежит ли вершина текущему тайлу
-    bool isCurrentTile = (int(segmentIndex.x) == currentRing &&
-                         int(segmentIndex.y) == currentSegment);
+void main() {
+    vTexCoord = texCoord;
+    vTileCoord = tileCoord;
 
-    // Передаем UV-координаты как есть, они уже правильно настроены для тайла
-    TexCoord = texCoord;
+    mat3 normalMatrix = transpose(inverse(mat3(modelMatrix)));
+    vNormal = normalize(normalMatrix * normal);
 
-    WorldPos = vec3(model * vec4(position, 1.0));
-    WorldNormal = normalize(normalMatrix * normal);
-    Visibility = float(isCurrentTile);
+    vec4 worldPos = modelMatrix * vec4(position, 1.0);
+    vFragPos = worldPos.xyz;
 
-    gl_Position = mvp * vec4(position, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
 }
