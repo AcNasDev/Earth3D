@@ -6,7 +6,7 @@
 TileTextureManager::TileTextureManager(const QString& path, int size)
     : imagePath(path)
     , tileSize(size)
-    , tileCache(64)
+    , tileCache(12)
     , textureArrayId(0)
 {
     QImageReader::setAllocationLimit(0);
