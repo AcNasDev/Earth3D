@@ -161,7 +161,7 @@ void EarthRenderer::createSphere(int rings, int segments)
             float z = sin(phi) * sin(theta) * radius;
 
             // Текстурные координаты
-            // Меняем направление текстурных координат для правильного отображения
+            // Инвертируем U координату для правильной ориентации текстуры
             float u = 1.0f - static_cast<float>(segment) / segments;
             float v = static_cast<float>(ring) / rings;
 
@@ -180,38 +180,55 @@ void EarthRenderer::createSphere(int rings, int segments)
     // Генерация индексов - меняем порядок вершин для правильной ориентации треугольников
     for (int ring = 0; ring < rings; ++ring) {
         for (int segment = 0; segment < segments; ++segment) {
-            int current = ring * (segments + 1) + segment;
-            int next = current + segments + 1;
+            GLuint current = ring * (segments + 1) + segment;
+            GLuint next = current + segments + 1;
 
-            // Меняем порядок вершин для правильной ориентации треугольников
-            indices << current << current + 1 << next;
-            indices << next << current + 1 << next + 1;
+            // Изменяем порядок вершин для правильной ориентации треугольников
+            indices << current << next << current + 1;
+            indices << current + 1 << next << next + 1;
         }
     }
 
-    // Загружаем данные в буферы
+    vertexCount = indices.size();
+
+    // Создаем и привязываем VAO
+    vao.create();
+    vao.bind();
+
+    // Создаем, привязываем и заполняем VBO
+    vbo.create();
     vbo.bind();
     vbo.allocate(vertices.constData(), vertices.size() * sizeof(GLfloat));
 
+    // Создаем, привязываем и заполняем IBO
+    indexBuffer.create();
     indexBuffer.bind();
     indexBuffer.allocate(indices.constData(), indices.size() * sizeof(GLuint));
 
     // Настраиваем атрибуты вершин
-    program.enableAttributeArray(0);
-    program.setAttributeBuffer(0, GL_FLOAT, 0, 3, 8 * sizeof(GLfloat));
+    // Позиция
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), nullptr);
 
-    program.enableAttributeArray(1);
-    program.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(GLfloat), 2, 8 * sizeof(GLfloat));
+    // Текстурные координаты
+    glEnableVertexAttribArray(1);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
+                          reinterpret_cast<void*>(3 * sizeof(GLfloat)));
 
-    program.enableAttributeArray(2);
-    program.setAttributeBuffer(2, GL_FLOAT, 5 * sizeof(GLfloat), 3, 8 * sizeof(GLfloat));
+    // Нормаль
+    glEnableVertexAttribArray(2);
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
+                          reinterpret_cast<void*>(5 * sizeof(GLfloat)));
 
-    vertexCount = indices.size();
+    // Отвязываем VAO и буферы
+    vao.release();
+    indexBuffer.release();
+    vbo.release();
 
-    // Включаем отсечение задних граней
+    // Настраиваем отсечение задних граней
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-    glFrontFace(GL_CCW); // против часовой стрелки
+    glFrontFace(GL_CCW);
 }
 
 GLint EarthRenderer::getMaxTextureSize()
@@ -234,7 +251,7 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
 
-    // Передаем количество тайлов
+    // Передаем информацию о тайлах
     program.setUniformValue("tilesX", earthTextureTiles->getTilesX());
     program.setUniformValue("tilesY", earthTextureTiles->getTilesY());
 
@@ -251,9 +268,24 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     normalMapTiles->bindAllTiles();
     program.setUniformValue("normalMap", 2);
 
+    // Включаем необходимые состояния OpenGL
+    glEnable(GL_DEPTH_TEST);
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW);
     // Отрисовка
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
+    glDisable(GL_CULL_FACE);
 
+    // Отключаем состояния
+    glDisable(GL_CULL_FACE);
+    glDisable(GL_DEPTH_TEST);
+
+    // Освобождаем ресурсы
     vao.release();
     program.release();
 }

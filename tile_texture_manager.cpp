@@ -6,17 +6,19 @@
 TileTextureManager::TileTextureManager(const QString& path, int size)
     : imagePath(path)
     , tileSize(size)
-    , tileCache(128)
+    , tileCache(12)
     , textureArrayId(0)
-    , isTextureArrayInitialized(false)
 {
     QImageReader::setAllocationLimit(0);
+    qDebug() << "Created TileTextureManager for" << path
+             << "with tile size" << size;
 }
 
 TileTextureManager::~TileTextureManager()
 {
     if (textureArrayId) {
         glDeleteTextures(1, &textureArrayId);
+        textureArrayId = 0;
     }
 }
 
@@ -246,18 +248,68 @@ void TileTextureManager::bindAllTiles()
 {
     QMutexLocker locker(&cacheMutex);
 
-    // Проверяем есть ли хотя бы один тайл
+    // Проверяем есть ли тайлы
     if (tilesX <= 0 || tilesY <= 0) {
         qWarning() << "No tiles to bind";
         return;
     }
 
-    // Привязываем текущий тайл (мы не должны загружать тайлы в этом методе)
-    QPoint currentTilePos(0, 0);
-    if (tileCache.contains(currentTilePos)) {
-        QOpenGLTexture* texture = tileCache.object(currentTilePos);
-        if (texture) {
-            texture->bind();
+    // Создаем и инициализируем текстурный массив, если нужно
+    if (!textureArrayId) {
+        glGenTextures(1, &textureArrayId);
+        glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
+
+        // Инициализируем хранилище для текстурного массива
+        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
+                     tileSize, tileSize, tilesX * tilesY,
+                     0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
+
+        // Настраиваем параметры текстурного массива
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+        // Загружаем все тайлы в текстурный массив
+        int layer = 0;
+        for (int y = 0; y < tilesY; ++y) {
+            for (int x = 0; x < tilesX; ++x) {
+                QPoint tilePos(x, y);
+                if (!tileCache.contains(tilePos)) {
+                    loadTile(x, y);
+                }
+
+                QOpenGLTexture* tile = tileCache.object(tilePos);
+                if (tile && tile->isCreated()) {
+                    // Получаем данные из текстуры
+                    GLuint sourceTexture = tile->textureId();
+                    GLint width = tile->width();
+                    GLint height = tile->height();
+
+                    // Создаем временный буфер для данных текстуры
+                    QVector<GLubyte> pixels(width * height * 4);
+
+                    // Получаем данные из текстуры
+                    glBindTexture(GL_TEXTURE_2D, sourceTexture);
+                    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
+
+                    // Загружаем данные в текстурный массив
+                    glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
+                    glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                                    0, 0, layer,
+                                    width, height, 1,
+                                    GL_RGBA, GL_UNSIGNED_BYTE,
+                                    pixels.data());
+
+                    qDebug() << "Loaded tile" << x << y << "to layer" << layer;
+                    layer++;
+                }
+            }
         }
+
+        qDebug() << "Initialized texture array with" << tilesX * tilesY << "layers";
     }
+
+    // Привязываем текстурный массив
+    glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 }

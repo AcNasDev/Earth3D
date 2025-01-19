@@ -10,28 +10,19 @@ uniform int tilesX;
 uniform int tilesY;
 
 out vec2 TexCoord;
-flat out int TileIndex;
+out vec2 GlobalTexCoord; // Добавляем для определения тайла
 out vec3 WorldPos;
 out vec3 WorldNormal;
 
 void main()
 {
-    // Вычисляем индекс тайла
-    int tileX = int(texCoord.x * tilesX);
-    int tileY = int(texCoord.y * tilesY);
-
-    // Убеждаемся, что индексы в допустимых пределах
-    tileX = clamp(tileX, 0, tilesX - 1);
-    tileY = clamp(tileY, 0, tilesY - 1);
-
-    // Вычисляем индекс тайла в текстурном массиве
-    TileIndex = tileY * tilesX + tileX;
+    // Сохраняем оригинальные текстурные координаты для определения тайла
+    GlobalTexCoord = texCoord;
 
     // Вычисляем локальные текстурные координаты внутри тайла
-    TexCoord = vec2(
-        fract(texCoord.x * tilesX),
-        fract(texCoord.y * tilesY)
-    );
+    float tileU = fract(texCoord.x * tilesX);
+    float tileV = fract(texCoord.y * tilesY);
+    TexCoord = vec2(tileU, tileV);
 
     WorldPos = vec3(model * vec4(position, 1.0));
     WorldNormal = normalMatrix * normal;
