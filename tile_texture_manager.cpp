@@ -81,39 +81,34 @@ void TileTextureManager::updateVisibleTiles(const QMatrix4x4& viewProjection, co
     visibleTiles = newVisibleTiles;
 }
 
+bool TileTextureManager::isTileLoaded(int ring, int segment)
+{
+    return tiles.contains({ring, segment});
+}
+
 void TileTextureManager::loadTile(int ring, int segment)
 {
-    // Проверяем, не превышен ли лимит загруженных тайлов
-    if (tiles.size() >= MAX_LOADED_TILES) {
-        // Находим и выгружаем самый старый невидимый тайл
-        for (auto it = tiles.begin(); it != tiles.end(); ++it) {
-            if (!visibleTiles.contains({it.key().first, it.key().second})) {
-                unloadTile(it.key().first, it.key().second);
-                break;
-            }
-        }
+    if (sourceImage.isNull()) {
+        qDebug() << "Source image is null!";
+        return;
     }
 
-    // Вычисляем границы тайла в исходном изображении
+    // Получаем границы тайла
     QRectF bounds = calculateTileBounds(ring, segment);
+
+    // Вычисляем пиксельные координаты в исходном изображении
     int x = bounds.x() * sourceImage.width();
     int y = bounds.y() * sourceImage.height();
     int width = bounds.width() * sourceImage.width();
     int height = bounds.height() * sourceImage.height();
 
-    // Вырезаем часть изображения
+    // Вырезаем часть изображения для тайла
     QImage tileImage = sourceImage.copy(x, y, width, height);
 
-    // Конвертируем в формат RGBA8
+    // Конвертируем в формат RGBA
     tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
 
-    // Проверяем, что изображение валидно
-    if (tileImage.isNull() || tileImage.width() <= 0 || tileImage.height() <= 0) {
-        qDebug() << "Invalid tile image for ring:" << ring << "segment:" << segment
-                 << "size:" << tileImage.size();
-        return;
-    }
-
+    // Создаем текстуру OpenGL
     GLuint textureId;
     glGenTextures(1, &textureId);
     glBindTexture(GL_TEXTURE_2D, textureId);
@@ -125,32 +120,14 @@ void TileTextureManager::loadTile(int ring, int segment)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
     // Загружаем данные текстуры
-    GLenum format = GL_RGBA;
-    GLenum internalFormat = GL_RGBA8;
-
-    glTexImage2D(GL_TEXTURE_2D,
-                 0,                    // уровень мипмапа
-                 internalFormat,       // внутренний формат
-                 tileImage.width(),
-                 tileImage.height(),
-                 0,                    // границы
-                 format,              // формат входных данных
-                 GL_UNSIGNED_BYTE,    // тип входных данных
-                 tileImage.constBits());
-
-    // Проверяем ошибки OpenGL
-    GLenum err = glGetError();
-    if (err != GL_NO_ERROR) {
-        qDebug() << "OpenGL error when loading tile texture:" << err
-                 << "Ring:" << ring << "Segment:" << segment;
-    }
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 tileImage.width(), tileImage.height(), 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, tileImage.bits());
 
     // Сохраняем информацию о тайле
     Tile tile;
-    tile.ring = ring;
-    tile.segment = segment;
-    tile.isLoaded = true;
     tile.textureId = textureId;
+    tile.isLoaded = true;
     tile.bounds = bounds;
 
     tiles.insert({ring, segment}, tile);
@@ -167,14 +144,14 @@ void TileTextureManager::unloadTile(int ring, int segment)
 
 QRectF TileTextureManager::calculateTileBounds(int ring, int segment) const
 {
-    float u1 = static_cast<float>(segment) / segments;
-    float u2 = static_cast<float>(segment + 1) / segments;
-    float v1 = static_cast<float>(ring) / rings;
-    float v2 = static_cast<float>(ring + 1) / rings;
+    // Вычисляем UV-координаты тайла
+    float u1 = static_cast<float>(segment) / segment;
+    float u2 = static_cast<float>(segment + 1) / segment;
+    float v1 = static_cast<float>(ring) / ring;
+    float v2 = static_cast<float>(ring + 1) / ring;
 
-    return QRectF(u1, v1, u2 - u1, v2 - v1);
+    return QRectF(QPointF(u1, v1), QPointF(u2, v2));
 }
-
 bool TileTextureManager::isTileVisible(int ring, int segment) const
 {
     // Проверяем, есть ли тайл в списке видимых

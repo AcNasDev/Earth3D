@@ -8,11 +8,9 @@
 #include <QString>
 
 struct Tile {
-    int ring;
-    int segment;
-    bool isLoaded;
     GLuint textureId;
-    QRectF bounds;  // Границы тайла в UV координатах
+    bool isLoaded;
+    QRectF bounds;  // Границы тайла в UV-координатах
 };
 
 class TileTextureManager : protected QOpenGLFunctions {
@@ -24,9 +22,9 @@ public:
     void updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model);
     void bindTileForSegment(int ring, int segment);
     bool isTileVisible(int ring, int segment) const;
-
-private:
     void loadTile(int ring, int segment);
+    bool isTileLoaded(int ring, int segment);
+private:
     void unloadTile(int ring, int segment);
     QRectF calculateTileBounds(int ring, int segment) const;
     bool isTileInViewFrustum(const QRectF& bounds, const QMatrix4x4& viewProjection) const;

@@ -6,52 +6,43 @@ in vec3 WorldNormal;
 in float Visibility;
 
 uniform sampler2D earthTexture;
-uniform sampler2D heightMap;
-uniform sampler2D normalMap;
-uniform int numSegments;
-uniform int numRings;
 uniform float gridThickness;
 uniform vec4 gridColor;
+uniform int numRings;
+uniform int numSegments;
 
 out vec4 FragColor;
 
 bool isOnGrid(vec2 uv) {
-    // Преобразуем UV-координаты в координаты сетки
-    float segmentWidth = 1.0 / float(numSegments);
-    float ringHeight = 1.0 / float(numRings);
+    float ringStep = 1.0 / float(numRings);
+    float segmentStep = 1.0 / float(numSegments);
 
-    // Вычисляем расстояние до ближайшей линии сетки
-    vec2 gridPos = uv / vec2(segmentWidth, ringHeight);
+    vec2 gridPos = vec2(uv.x / segmentStep, uv.y / ringStep);
     vec2 gridFrac = fract(gridPos);
 
-    // Определяем толщину линий
-    float thickness = gridThickness;
-
-    // Проверяем близость к линиям сетки
-    bool isVerticalLine = gridFrac.x < thickness || gridFrac.x > (1.0 - thickness);
-    bool isHorizontalLine = gridFrac.y < thickness || gridFrac.y > (1.0 - thickness);
-
-    return isVerticalLine || isHorizontalLine;
+    return any(lessThan(gridFrac, vec2(gridThickness))) ||
+           any(greaterThan(gridFrac, vec2(1.0 - gridThickness)));
 }
 
 void main()
 {
-    // Координаты тайла должны совпадать с сеткой
-    vec2 tileCoord = TexCoord;
+    if (Visibility < 0.5) {
+        discard;
+    }
 
-    // Получаем цвет из текстуры
-    vec4 texColor = texture(earthTexture, tileCoord);
+    // Получаем цвет из текстуры тайла
+    vec4 texColor = texture(earthTexture, TexCoord);
 
     // Базовое освещение
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     vec3 normal = normalize(WorldNormal);
     float diffuse = max(dot(normal, lightDir), 0.0);
-    vec3 ambient = vec3(0.2);
-    vec3 finalColor = texColor.rgb * (ambient + diffuse);
 
-    // Отрисовка сетки
-    if (isOnGrid(tileCoord)) {
-        FragColor = vec4(gridColor.rgb, gridColor.a);
+    vec3 finalColor = texColor.rgb * (0.2 + 0.8 * diffuse);
+
+    // Отрисовка сетки поверх текстуры
+    if (isOnGrid(TexCoord)) {
+        FragColor = mix(vec4(finalColor, 1.0), gridColor, 0.5);
     } else {
         FragColor = vec4(finalColor, 1.0);
     }

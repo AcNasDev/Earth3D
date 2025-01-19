@@ -135,56 +135,49 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
 {
     if (!program.isLinked()) return;
 
-    QMatrix4x4 viewProjection = projection * view;
-    updateVisibleTiles(viewProjection, model);
-
     program.bind();
     vao.bind();
 
-    // Матрицы
+    // Устанавливаем базовые униформы
     QMatrix4x4 mvp = projection * view * model;
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
-    program.setUniformValue("gridThickness", 0.001f);
-    program.setUniformValue("gridColor", QVector4D(1.0f, 1.0f, 0.0f, 0.5f));
-    program.setUniformValue("numSegments", SEGMENTS);
-    program.setUniformValue("numRings", RINGS);
 
-    // Настройка состояния OpenGL
+    // Устанавливаем параметры сетки
+    program.setUniformValue("gridThickness", 0.02f);
+    program.setUniformValue("gridColor", QVector4D(1.0f, 1.0f, 0.0f, 0.5f));
+    program.setUniformValue("numRings", RINGS);
+    program.setUniformValue("numSegments", SEGMENTS);
+
+    // Настраиваем OpenGL
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
-    // Для каждого видимого сегмента
+    // Отрисовываем каждый тайл
     for (int ring = 0; ring < RINGS; ++ring) {
         for (int segment = 0; segment < SEGMENTS; ++segment) {
-            if (earthTextureTiles->isTileVisible(ring, segment)) {
-                // Устанавливаем текущий сегмент
-                program.setUniformValue("currentRing", ring);
-                program.setUniformValue("currentSegment", segment);
+            // Устанавливаем текущий тайл
+            program.setUniformValue("currentRing", ring);
+            program.setUniformValue("currentSegment", segment);
 
-                // Привязываем текстуры для текущего сегмента
-                glActiveTexture(GL_TEXTURE0);
-                earthTextureTiles->bindTileForSegment(ring, segment);
-                program.setUniformValue("earthTexture", 0);
-
-                glActiveTexture(GL_TEXTURE1);
-                heightMapTiles->bindTileForSegment(ring, segment);
-                program.setUniformValue("heightMap", 1);
-
-                glActiveTexture(GL_TEXTURE2);
-                normalMapTiles->bindTileForSegment(ring, segment);
-                program.setUniformValue("normalMap", 2);
-
-                // Отрисовываем всю геометрию
-                // Шейдер сам отфильтрует ненужные фрагменты
-                glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
+            // Загружаем тайл если нужно
+            if (!earthTextureTiles->isTileLoaded(ring, segment)) {
+                earthTextureTiles->loadTile(ring, segment);
             }
+
+            // Привязываем текстуру тайла
+            glActiveTexture(GL_TEXTURE0);
+            earthTextureTiles->bindTileForSegment(ring, segment);
+            program.setUniformValue("earthTexture", 0);
+
+            // Отрисовываем геометрию
+            glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
         }
     }
 
-    // Возвращаем состояние OpenGL
+    // Восстанавливаем состояние OpenGL
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
 
