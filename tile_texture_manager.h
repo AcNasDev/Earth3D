@@ -21,7 +21,7 @@ public:
     ~TileTextureManager();
 
     void initialize();
-    void bindTileForSegment(int ring, int segment);
+    bool bindTileForSegment(int ring, int segment);
     void loadTile(int ring, int segment);
     bool isTileLoaded(int ring, int segment);
 private:

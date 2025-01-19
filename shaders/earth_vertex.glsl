@@ -10,6 +10,8 @@ uniform mat4 model;
 uniform mat3 normalMatrix;
 uniform int currentRing;
 uniform int currentSegment;
+uniform int numRings;
+uniform int numSegments;
 
 out vec2 TexCoord;
 out vec3 WorldPos;
@@ -18,13 +20,27 @@ out float Visibility;
 
 void main()
 {
-    // Определяем видимость для текущего тайла
-    Visibility = (int(segmentIndex.x) == currentRing &&
-                 int(segmentIndex.y) == currentSegment) ? 1.0 : 0.0;
+    // Преобразуем глобальные UV-координаты в локальные координаты тайла
+    float tileU = texCoord.x * numSegments - currentSegment;
+    float tileV = texCoord.y * numRings - currentRing;
+
+    // Проверяем, принадлежит ли вершина текущему тайлу
+    bool isCurrentTile = (int(segmentIndex.x) == currentRing &&
+                         int(segmentIndex.y) == currentSegment);
+
+    // Устанавливаем текстурные координаты для текущего тайла
+    if (isCurrentTile) {
+        TexCoord = vec2(
+            (texCoord.x * numSegments - float(currentSegment)),
+            (texCoord.y * numRings - float(currentRing))
+        );
+    } else {
+        TexCoord = texCoord;
+    }
 
     WorldPos = vec3(model * vec4(position, 1.0));
     WorldNormal = normalize(normalMatrix * normal);
-    TexCoord = texCoord;
+    Visibility = float(isCurrentTile);
 
     gl_Position = mvp * vec4(position, 1.0);
 }

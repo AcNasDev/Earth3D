@@ -189,10 +189,12 @@ bool TileTextureManager::isTileInViewFrustum(const QRectF& bounds, const QMatrix
     return false;
 }
 
-void TileTextureManager::bindTileForSegment(int ring, int segment)
+bool TileTextureManager::bindTileForSegment(int ring, int segment)
 {
     auto it = tiles.find({ring, segment});
     if (it != tiles.end() && it.value().isLoaded) {
         glBindTexture(GL_TEXTURE_2D, it.value().textureId);
+        return true;
     }
+    return false;
 }

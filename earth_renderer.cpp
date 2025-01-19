@@ -137,28 +137,37 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
 
+    // Устанавливаем количество колец и сегментов
+    program.setUniformValue("numRings", RINGS);
+    program.setUniformValue("numSegments", SEGMENTS);
+
     // Настройка OpenGL
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
-
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Рендеринг каждого тайла
+    // Отрисовка каждого тайла
     for (int ring = 0; ring < RINGS; ++ring) {
         for (int segment = 0; segment < SEGMENTS; ++segment) {
-            // Установка текущего тайла
+            // Устанавливаем текущий тайл
             program.setUniformValue("currentRing", ring);
             program.setUniformValue("currentSegment", segment);
 
-            // Привязка текстуры
+            // Привязываем текстуру
             glActiveTexture(GL_TEXTURE0);
-            earthTextureTiles->bindTileForSegment(ring, segment);
-            glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
+            if (earthTextureTiles->bindTileForSegment(ring, segment)) {
+                program.setUniformValue("earthTexture", 0);
+
+
+                // Отрисовка геометрии
+                glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
+            }
         }
     }
 
+    // Восстанавливаем состояние OpenGL
     glDisable(GL_BLEND);
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
