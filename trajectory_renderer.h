@@ -16,24 +16,16 @@ public:
 
 private:
     void initShaders();
-    void createDashedLine(const QVector<QVector3D>& sourcePoints, QVector<QVector3D>& dashedPoints);
-    void renderTrajectory(const QVector<QVector3D>& points,
-                          const QVector4D& color,
-                          bool isDashed,
-                          const QMatrix4x4& mvp);
 
     QVector<QVector3D> currentTrajectory;
     QVector<QVector3D> predictedTrajectory;
 
-    // Буферы для хранения данных
     QOpenGLBuffer currentVBO;
     QOpenGLBuffer predictedVBO;
     int currentVertexCount;
     int predictedVertexCount;
     bool needsUpdate;
-
-    const float dashLength = 0.1f;  // Длина штриха
-    const float gapLength = 0.1f;   // Длина промежутка
+    float time;  // Для анимации пунктирной линии
 };
 
 #endif // TRAJECTORY_RENDERER_H

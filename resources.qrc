@@ -8,5 +8,7 @@
         <file>shaders/line_vertex.glsl</file>
         <file>shaders/axis_fragment.glsl</file>
         <file>shaders/axis_vertex.glsl</file>
+        <file>shaders/trajectory.frag</file>
+        <file>shaders/trajectory.vert</file>
     </qresource>
 </RCC>
