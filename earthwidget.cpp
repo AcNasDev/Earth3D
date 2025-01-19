@@ -74,7 +74,6 @@ void EarthWidget::initializeGL()
     earthRenderer->initialize();
     satelliteRenderer->initialize();
     trajectoryRenderer->initialize();
-    satelliteInfoRenderer->initialize();
 
     // Настройка параметров рендеринга
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -107,30 +106,25 @@ void EarthWidget::paintGL()
 
     QMatrix4x4 viewMatrix = camera.getViewMatrix();
 
-    // Отрисовка Земли
+    // Отрисовка 3D объектов
     earthRenderer->render(projection, viewMatrix, model);
-
-    // Отрисовка спутников
     satelliteRenderer->render(projection, viewMatrix, model);
 
-    // Отрисовка траектории для выбранного спутника
     if (selectedSatelliteId != -1) {
         trajectoryRenderer->render(projection, viewMatrix, model);
     }
 
-    // Отрисовка информации о спутнике
+    // Отрисовка 2D информации поверх 3D сцены
+    QPainter painter(this);
+    painter.setRenderHint(QPainter::Antialiasing);
+
+    // Отрисовка информации о выбранном спутнике
     if (selectedSatelliteId != -1 && satellites.contains(selectedSatelliteId)) {
-        glDisable(GL_DEPTH_TEST);  // Отключаем тест глубины для текста
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-        satelliteInfoRenderer->render(projection, viewMatrix, model, satellites[selectedSatelliteId]);
-
-        glEnable(GL_DEPTH_TEST);
+        satelliteInfoRenderer->render(&painter, projection, viewMatrix, model,
+                                      satellites[selectedSatelliteId], size());
     }
 
     // Отрисовка FPS
-    QPainter painter(this);
     fpsRenderer->render(painter, size());
     painter.end();
 
@@ -181,10 +175,6 @@ void EarthWidget::addSatellite(int id, const QVector3D& position, const QString&
     satellites[id] = satellite;
     satelliteRenderer->updateSatellites(satellites);
 
-    // Если это выбранный спутник, обновляем его информацию
-    if (id == selectedSatelliteId) {
-        satelliteInfoRenderer->updateInfoTexture(satellite);
-    }
 
     update();
 }
@@ -203,9 +193,6 @@ void EarthWidget::updateSatellitePosition(int id, const QVector3D& newPosition,
         it->angle = angle;
 
         if (id == selectedSatelliteId) {
-            // Обновляем информацию о позиции в текстуре
-            satelliteInfoRenderer->updateInfoTexture(*it);
-
             if (!timerActive) {
                 timerActive = true;
                 updateTimer.singleShot(100, this, [this, trajectory, futureTrajectory]() {
@@ -264,10 +251,6 @@ int EarthWidget::pickSatellite(const QPoint& mousePos)
 
     if (closestSatelliteId != -1) {
         selectedSatelliteId = closestSatelliteId;
-        if (satellites.contains(selectedSatelliteId)) {
-            qDebug() << "Selected satellite ID:" << selectedSatelliteId;
-            satelliteInfoRenderer->updateInfoTexture(satellites[selectedSatelliteId]);
-        }
     } else {
         selectedSatelliteId = -1;
     }
