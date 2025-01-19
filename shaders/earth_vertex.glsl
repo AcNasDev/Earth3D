@@ -7,8 +7,8 @@ uniform mat4 mvp;
 uniform mat4 model;
 uniform mat3 normalMatrix;
 uniform vec4 earthTextureInfo;    // xy - offset, zw - scale
-uniform vec4 heightMapInfo;       // xy - offset, zw - scale
-uniform vec4 normalMapInfo;       // xy - offset, zw - scale
+uniform vec4 heightMapInfo;
+uniform vec4 normalMapInfo;
 uniform float displacementScale;
 
 out vec2 TexCoord;
@@ -19,15 +19,14 @@ out vec3 WorldNormal;
 
 void main()
 {
-    // Преобразуем текстурные координаты для каждого тайла
-    TexCoord = texCoord * earthTextureInfo.zw + earthTextureInfo.xy;
-    HeightMapCoord = texCoord * heightMapInfo.zw + heightMapInfo.xy;
-    NormalMapCoord = texCoord * normalMapInfo.zw + normalMapInfo.xy;
+    // Преобразуем текстурные координаты с учетом тайла
+    TexCoord = (texCoord * earthTextureInfo.zw) + earthTextureInfo.xy;
+    HeightMapCoord = (texCoord * heightMapInfo.zw) + heightMapInfo.xy;
+    NormalMapCoord = (texCoord * normalMapInfo.zw) + normalMapInfo.xy;
 
-    // Для отладки добавим проверку границ текстурных координат
-    // TexCoord = clamp(TexCoord, 0.0, 1.0);
-
+    // Преобразуем позицию и нормаль
     WorldPos = vec3(model * vec4(position, 1.0));
-    WorldNormal = normalMatrix * normal;
+    WorldNormal = normalize(normalMatrix * normal);
+
     gl_Position = mvp * vec4(position, 1.0);
 }

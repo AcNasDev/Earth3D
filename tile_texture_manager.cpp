@@ -158,37 +158,30 @@ QVector4D TileTextureManager::getCurrentTileInfo(const QVector2D& texCoord)
 
 QVector4D TileTextureManager::calculateTileInfo(const QPoint& tilePos)
 {
-    // Проверяем границы
     if (tilePos.x() < 0 || tilePos.x() >= tilesX ||
         tilePos.y() < 0 || tilePos.y() >= tilesY) {
-        qDebug() << "Invalid tile position:" << tilePos;
         return QVector4D(0, 0, 1, 1);
     }
 
-    // Вычисляем смещение тайла
-    float offsetX = static_cast<float>(tilePos.x() * tileSize) / originalSize.width();
-    float offsetY = static_cast<float>(tilePos.y() * tileSize) / originalSize.height();
+    // Вычисляем размер тайла в нормализованных координатах [0,1]
+    float tileWidth = static_cast<float>(tileSize) / originalSize.width();
+    float tileHeight = static_cast<float>(tileSize) / originalSize.height();
 
-    // Вычисляем масштаб тайла
-    float scaleX = static_cast<float>(tileSize) / originalSize.width();
-    float scaleY = static_cast<float>(tileSize) / originalSize.height();
+    // Вычисляем смещение в нормализованных координатах
+    float offsetX = tilePos.x() * tileWidth;
+    float offsetY = tilePos.y() * tileHeight;
 
-    // Корректируем масштаб для последних тайлов
+    // Для последнего тайла корректируем размер
     if (tilePos.x() == tilesX - 1) {
-        int lastTileWidth = originalSize.width() - (tilesX - 1) * tileSize;
-        scaleX = static_cast<float>(lastTileWidth) / originalSize.width();
+        tileWidth = 1.0f - offsetX;
     }
     if (tilePos.y() == tilesY - 1) {
-        int lastTileHeight = originalSize.height() - (tilesY - 1) * tileSize;
-        scaleY = static_cast<float>(lastTileHeight) / originalSize.height();
+        tileHeight = 1.0f - offsetY;
     }
 
-    QVector4D tileInfo(offsetX, offsetY, scaleX, scaleY);
-    qDebug() << "Tile info for pos" << tilePos << ":"
-             << "\nOffset:" << offsetX << offsetY
-             << "\nScale:" << scaleX << scaleY
-             << "\nTile size:" << tileSize
-             << "\nOriginal size:" << originalSize;
+    qDebug() << "Tile" << tilePos << "info:"
+             << "offset:" << offsetX << offsetY
+             << "scale:" << tileWidth << tileHeight;
 
-    return tileInfo;
+    return QVector4D(offsetX, offsetY, tileWidth, tileHeight);
 }

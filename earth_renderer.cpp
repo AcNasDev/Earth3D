@@ -96,29 +96,30 @@ void EarthRenderer::createSphere(int rings, int segments)
     QVector<GLfloat> vertices;
     QVector<GLuint> indices;
 
-    // Генерация вершин сферы
     for (int ring = 0; ring <= rings; ++ring) {
         float phi = ring * M_PI / rings;
         for (int segment = 0; segment <= segments; ++segment) {
             float theta = segment * 2.0f * M_PI / segments;
 
             // Позиция
-            float x = sin(phi) * cos(theta);
-            float y = cos(phi);
-            float z = sin(phi) * sin(theta);
+            float x = sin(phi) * cos(theta) * radius;
+            float y = cos(phi) * radius;
+            float z = sin(phi) * sin(theta) * radius;
 
-            vertices << x << y << z;
+            // Текстурные координаты
+            // Важно: меняем способ вычисления текстурных координат
+            float u = segment / static_cast<float>(segments);
+            float v = ring / static_cast<float>(rings);
 
-            // Текстурные координаты - важно генерировать их правильно
-            float u = 1.0f - static_cast<float>(segment) / segments;
-            float v = 1.0f - static_cast<float>(ring) / rings;
-            vertices << u << v;
+            // Нормаль
+            float nx = sin(phi) * cos(theta);
+            float ny = cos(phi);
+            float nz = sin(phi) * sin(theta);
 
-            // Нормали
-            vertices << x << y << z;
-
-            // Отладка
-            qDebug() << "Vertex:" << x << y << z << "TexCoord:" << u << v;
+            // Добавляем вершину
+            vertices << x << y << z;      // позиция
+            vertices << u << v;           // текстурные координаты
+            vertices << nx << ny << nz;   // нормаль
         }
     }
 
@@ -183,54 +184,47 @@ QVector2D EarthRenderer::calculateTextureCoordinate(const QVector3D& cameraPos)
 
 void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
 {
-    if (!texturesInitialized) {
-        return;
-    }
+    if (!texturesInitialized) return;
 
     program.bind();
     vao.bind();
 
-    // Создаем матрицу для Земли
-    QMatrix4x4 earthMatrix = model;
-    earthMatrix.scale(radius);
-
-    // Устанавливаем униформы для шейдеров
-    program.setUniformValue("mvp", projection * view * earthMatrix);
-    program.setUniformValue("model", earthMatrix);
-    program.setUniformValue("normalMatrix", earthMatrix.normalMatrix());
-
-    // Получаем позицию камеры
-    QVector3D cameraPos = view.inverted().column(3).toVector3D();
-    QVector2D texCoord = calculateTextureCoordinate(cameraPos);
-    program.setUniformValue("viewPos", cameraPos);
-
-    // Устанавливаем масштаб смещения для рельефа
+    // Матрицы
+    QMatrix4x4 mvp = projection * view * model;
+    program.setUniformValue("mvp", mvp);
+    program.setUniformValue("model", model);
+    program.setUniformValue("normalMatrix", model.normalMatrix());
     program.setUniformValue("displacementScale", displacementScale);
 
-    // Привязываем текстуры и обновляем тайлы
-    // Текстурный юнит 0 для цветовой текстуры
+    // Цветовая текстура Земли
     glActiveTexture(GL_TEXTURE0);
-    earthTextureTiles->bindTileForCoordinate(texCoord);
+    earthTextureTiles->bindTileForCoordinate(currentViewCenter);
     program.setUniformValue("earthTexture", 0);
+    auto earthInfo = earthTextureTiles->getCurrentTileInfo(currentViewCenter);
+    program.setUniformValue("earthTextureInfo", earthInfo);
 
-    // Текстурный юнит 1 для карты высот
+    // Карта высот
     glActiveTexture(GL_TEXTURE1);
-    heightMapTiles->bindTileForCoordinate(texCoord);
+    heightMapTiles->bindTileForCoordinate(currentViewCenter);
     program.setUniformValue("heightMap", 1);
+    auto heightInfo = heightMapTiles->getCurrentTileInfo(currentViewCenter);
+    program.setUniformValue("heightMapInfo", heightInfo);
 
-    // Текстурный юнит 2 для карты нормалей
+    // Карта нормалей
     glActiveTexture(GL_TEXTURE2);
-    normalMapTiles->bindTileForCoordinate(texCoord);
+    normalMapTiles->bindTileForCoordinate(currentViewCenter);
     program.setUniformValue("normalMap", 2);
+    auto normalInfo = normalMapTiles->getCurrentTileInfo(currentViewCenter);
+    program.setUniformValue("normalMapInfo", normalInfo);
 
-    // Передаем информацию о текущем тайле в шейдер
-    QVector4D tileInfo = heightMapTiles->getCurrentTileInfo(texCoord);
-    program.setUniformValue("tileInfo", tileInfo);
+    qDebug() << "Rendering with view center:" << currentViewCenter
+             << "\nEarth texture info:" << earthInfo
+             << "\nHeight map info:" << heightInfo
+             << "\nNormal map info:" << normalInfo;
 
-    // Рендерим сферу
+    // Отрисовка
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
 
-    // Очищаем состояние
     vao.release();
     program.release();
 }
