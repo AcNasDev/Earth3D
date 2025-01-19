@@ -5,25 +5,16 @@
 
 TileTextureManager::TileTextureManager(const QString& path, int size)
     : imagePath(path)
-    , tileSize(4096)
-    , tileCache(12) // Кэшируем до 12 тайлов
+    , tileSize(size)
+    , tileCache(12)
+    , textureArray(nullptr)
 {
     QImageReader::setAllocationLimit(0);
 }
 
 TileTextureManager::~TileTextureManager()
 {
-    // Очищаем кэш текстур
-    QList<QPoint> keys = tileCache.keys();
-    for (const QPoint& key : keys) {
-        QOpenGLTexture* texture = tileCache.take(key);
-        if (texture) {
-            if (texture->isCreated()) {
-                texture->destroy();
-            }
-            delete texture;
-        }
-    }
+    delete textureArray;
 }
 
 void TileTextureManager::initialize()

@@ -55,6 +55,7 @@ private:
     QMutex cacheMutex;
     QImage sourceImage;
     QVector<QVector4D> tilesInfo; // Информация для всех тайлов
+    QOpenGLTexture* textureArray;
 
     void loadTile(int x, int y);
     QPoint texCoordToTile(const QVector2D& texCoord);

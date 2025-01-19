@@ -221,25 +221,6 @@ GLint EarthRenderer::getMaxTextureSize()
     return maxSize;
 }
 
-QVector2D EarthRenderer::calculateTextureCoordinate(const QVector3D& cameraPos)
-{
-    // Преобразуем позицию камеры в сферические координаты
-    float longitude = atan2(cameraPos.z(), cameraPos.x());
-    float latitude = asin(cameraPos.y() / cameraPos.length());
-
-    // Нормализуем долготу и широту в диапазон [0,1]
-    // longitude: от -PI до PI -> [0,1]
-    // latitude: от -PI/2 до PI/2 -> [0,1]
-    float u = (longitude + M_PI) / (2.0f * M_PI);
-    float v = (latitude + M_PI_2) / M_PI;
-
-    qDebug() << "Camera spherical coords - longitude:" << longitude
-             << "latitude:" << latitude
-             << "UV coords:" << u << v;
-
-    return QVector2D(u, v);
-}
-
 void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
 {
     if (!texturesInitialized) return;
@@ -247,48 +228,16 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.bind();
     vao.bind();
 
-    // Матрицы
     QMatrix4x4 mvp = projection * view * model;
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
 
-    // Получаем информацию о текстурах
-    auto earthInfo = earthTextureTiles->getTextureInfo();
-    auto heightInfo = heightMapTiles->getTextureInfo();
-    auto normalInfo = normalMapTiles->getTextureInfo();
+    // Устанавливаем количество тайлов
+    program.setUniformValue("tilesX", earthTextureTiles->getTilesX());
+    program.setUniformValue("tilesY", earthTextureTiles->getTilesY());
 
-    // Устанавливаем uniform-переменные для каждой текстуры
-    program.setUniformValue("earthTextureInfo.tilesX", earthInfo.tilesX);
-    program.setUniformValue("earthTextureInfo.tilesY", earthInfo.tilesY);
-    program.setUniformValue("heightMapInfo.tilesX", heightInfo.tilesX);
-    program.setUniformValue("heightMapInfo.tilesY", heightInfo.tilesY);
-    program.setUniformValue("normalMapInfo.tilesX", normalInfo.tilesX);
-    program.setUniformValue("normalMapInfo.tilesY", normalInfo.tilesY);
-
-    // Передаем информацию о тайлах для каждой текстуры
-    for (int i = 0; i < earthInfo.tilesInfo.size(); ++i) {
-        program.setUniformValue(
-            QString("earthTextureInfo.tilesInfo[%1]").arg(i).toStdString().c_str(),
-            earthInfo.tilesInfo[i]
-            );
-    }
-
-    for (int i = 0; i < heightInfo.tilesInfo.size(); ++i) {
-        program.setUniformValue(
-            QString("heightMapInfo.tilesInfo[%1]").arg(i).toStdString().c_str(),
-            heightInfo.tilesInfo[i]
-            );
-    }
-
-    for (int i = 0; i < normalInfo.tilesInfo.size(); ++i) {
-        program.setUniformValue(
-            QString("normalMapInfo.tilesInfo[%1]").arg(i).toStdString().c_str(),
-            normalInfo.tilesInfo[i]
-            );
-    }
-
-    // Привязываем текстуры
+    // Привязываем текстурные массивы
     glActiveTexture(GL_TEXTURE0);
     earthTextureTiles->bindAllTiles();
     program.setUniformValue("earthTexture", 0);
