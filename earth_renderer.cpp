@@ -82,6 +82,8 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("projectionMatrix", projection);
     program.setUniformValue("viewMatrix", view);
     program.setUniformValue("modelMatrix", model);
+    QVector3D cameraPos = view.inverted().column(3).toVector3D();
+    program.setUniformValue("lightPos", cameraPos);
 
     // Привязываем все текстуры один раз
     glActiveTexture(GL_TEXTURE0);
