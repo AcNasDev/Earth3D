@@ -12,7 +12,7 @@ uniform sampler2D heightMap;
 uniform sampler2D normalMap;
 
 // Параметры освещения
-uniform vec3 lightPos; // Позиция будет передаваться из C++ кода
+uniform vec3 lightPos = vec3(100.0, 100.0, 100.0);
 uniform vec3 viewPos;
 uniform float ambientStrength = 0.2;  // Увеличьте значение для лучшего освещения теневой стороны
 uniform float specularStrength = 0.3; // Уменьшите для менее яркого блика
