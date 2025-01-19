@@ -34,7 +34,9 @@ QPoint SatelliteInfoRenderer::worldToScreen(const QVector3D& worldPos, const QMa
 void SatelliteInfoRenderer::drawInfoBox(QPainter* painter, const QPoint& pos, const QString& info)
 {
     // Настройка шрифта
-    QFontMetrics fm(qApp->font());
+    QFont font("Arial", 10);
+    painter->setFont(font);
+    QFontMetrics fm(font);
 
     // Разбиваем текст на строки
     QStringList lines = info.split('\n');
@@ -48,30 +50,29 @@ void SatelliteInfoRenderer::drawInfoBox(QPainter* painter, const QPoint& pos, co
         totalHeight += bounds.height();
     }
 
-    // Добавляем отступы
-    const int padding = 10;
+    // Добавляем минимальные отступы
+    const int padding = 4;
     maxWidth += padding * 2;
-    totalHeight += padding * 2 + (lines.count() - 1) * 5; // 5 пикселей между строками
+    totalHeight += padding * 2 + (lines.count() - 1) * 2;
+
+    // Позиционируем блок справа от спутника
+    int boxX = pos.x() + 5;  // Небольшой отступ вправо от точки спутника
+    int boxY = pos.y() - totalHeight / 2;  // Центрируем по вертикали относительно спутника
 
     // Создаем прямоугольник для фона
-    QRect backgroundRect(pos.x(), pos.y() - OFFSET_Y - totalHeight,
-                         maxWidth, totalHeight);
+    QRect backgroundRect(boxX, boxY, maxWidth, totalHeight);
 
-    // Рисуем фон с закругленными углами
+    // Рисуем фон
     painter->setPen(Qt::NoPen);
     painter->setBrush(QColor(0, 0, 0, 180));
-    painter->drawRoundedRect(backgroundRect, 5, 5);
-
-    // Рисуем линию от спутника к информационному блоку
-    painter->setPen(QPen(Qt::white, 1, Qt::DashLine));
-    painter->drawLine(pos, QPoint(pos.x(), backgroundRect.bottom()));
+    painter->drawRoundedRect(backgroundRect, 3, 3);
 
     // Рисуем текст
     painter->setPen(Qt::white);
     int y = backgroundRect.top() + padding;
     for (const QString& line : lines) {
-        painter->drawText(backgroundRect.left() + padding, y + fm.ascent(), line);
-        y += fm.height() + 5;
+        painter->drawText(boxX + padding, y + fm.ascent(), line);
+        y += fm.height() + 2;
     }
 }
 
@@ -79,24 +80,18 @@ void SatelliteInfoRenderer::render(QPainter* painter, const QMatrix4x4& projecti
                                    const QMatrix4x4& view, const QMatrix4x4& model,
                                    const Satellite& satellite, const QSize& viewportSize)
 {
-    // Вычисляем MVP матрицу
     QMatrix4x4 mvp = projection * view * model;
-
-    // Получаем экранные координаты спутника
     QPoint screenPos = worldToScreen(satellite.position, mvp, viewportSize);
 
-    // Проверяем, находится ли спутник в поле зрения
     if (screenPos.x() < 0 || screenPos.y() < 0 ||
         screenPos.x() > viewportSize.width() || screenPos.y() > viewportSize.height())
         return;
 
-    // Формируем текст информации
-    QString info = QString("ID: %1\n%2").arg(satellite.id).arg(satellite.info);
+    // Компактный формат информации
+    QString info = QString("%1\n%2").arg(satellite.id).arg(satellite.info);
 
-    // Включаем сглаживание
     painter->setRenderHint(QPainter::Antialiasing);
     painter->setRenderHint(QPainter::TextAntialiasing);
 
-    // Рисуем информационный блок
     drawInfoBox(painter, screenPos, info);
 }

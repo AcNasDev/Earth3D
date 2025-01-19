@@ -17,8 +17,6 @@ public:
 private:
     QPoint worldToScreen(const QVector3D& worldPos, const QMatrix4x4& mvp, const QSize& viewportSize);
     void drawInfoBox(QPainter* painter, const QPoint& pos, const QString& info);
-
-    static constexpr float OFFSET_Y = 20.0f; // Смещение текста от позиции спутника в пикселях
 };
 
 #endif
