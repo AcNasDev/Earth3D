@@ -47,6 +47,8 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         satellite_renderer.h satellite_renderer.cpp
         trajectory_renderer.h trajectory_renderer.cpp
         renderer.cpp
+        satellite_info_renderer.h satellite_info_renderer.cpp
+
 
     )
 # Define target properties for Android with Qt 6 as:

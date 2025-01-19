@@ -21,6 +21,7 @@ EarthWidget::EarthWidget(QWidget *parent)
     satelliteRenderer = new SatelliteRenderer();
     trajectoryRenderer = new TrajectoryRenderer();
     fpsRenderer = new FPSRenderer();
+    satelliteInfoRenderer = new SatelliteInfoRenderer();
 
     animationTimer = new QTimer(this);
     connect(animationTimer, &QTimer::timeout, [this]() {
@@ -39,6 +40,7 @@ EarthWidget::~EarthWidget()
     delete satelliteRenderer;
     delete trajectoryRenderer;
     delete fpsRenderer;
+    delete satelliteInfoRenderer;
     doneCurrent();
 }
 
@@ -72,6 +74,7 @@ void EarthWidget::initializeGL()
     earthRenderer->initialize();
     satelliteRenderer->initialize();
     trajectoryRenderer->initialize();
+    satelliteInfoRenderer->initialize();
 
     // Настройка параметров рендеринга
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
@@ -119,6 +122,10 @@ void EarthWidget::paintGL()
     }
 
     satelliteRenderer->render(projection, viewMatrix, model);
+    if (selectedSatelliteId != -1 && satellites.contains(selectedSatelliteId)) {
+        satelliteInfoRenderer->render(projection, camera.getViewMatrix(),
+                                      model, satellites[selectedSatelliteId]);
+    }
 
     // 2D Overlay
     QPainter painter(this);

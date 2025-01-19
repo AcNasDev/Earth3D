@@ -10,6 +10,7 @@
 #include "trajectory_renderer.h"
 #include "fps_renderer.h"
 #include "satellite.h"
+#include "satellite_info_renderer.h"
 
 class EarthWidget : public QOpenGLWidget
 {
@@ -51,6 +52,8 @@ private:
     SatelliteRenderer* satelliteRenderer;
     TrajectoryRenderer* trajectoryRenderer;
     FPSRenderer* fpsRenderer;
+    SatelliteInfoRenderer* satelliteInfoRenderer;
+
 
     // Matrices
     QMatrix4x4 projection;
