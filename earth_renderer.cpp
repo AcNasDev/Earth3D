@@ -31,6 +31,7 @@ EarthRenderer::~EarthRenderer()
 
 void EarthRenderer::initialize()
 {
+    return;
     if (!init()) {
         qDebug() << "Failed to initialize OpenGL functions for EarthRenderer";
         return;
@@ -51,6 +52,7 @@ void EarthRenderer::initialize()
 
 void EarthRenderer::initShaders()
 {
+    return;
     if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/earth_vertex.glsl")) {
         qDebug() << "Failed to compile earth vertex shader";
     }
@@ -88,6 +90,7 @@ int EarthRenderer::calculateOptimalTileSize(int width, int height)
 
 void EarthRenderer::initTextures()
 {
+    return;
     QString buildDir = QCoreApplication::applicationDirPath();
 
     // Загружаем изображения для определения их размеров
@@ -123,6 +126,7 @@ void EarthRenderer::initTextures()
 
 void EarthRenderer::initGeometry()
 {
+    return;
     vao.create();
     vao.bind();
 
@@ -216,6 +220,7 @@ GLint EarthRenderer::getMaxTextureSize()
 
 void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
 {
+    return;
     if (!texturesInitialized) return;
 
     program.bind();
@@ -226,7 +231,7 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
-
+    qDebug() << "!!!!!!!!!!!!!!!";
     // Привязываем текстуры
     glActiveTexture(GL_TEXTURE0);
     earthTextureTiles->bindAllTiles();
