@@ -161,9 +161,9 @@ void EarthRenderer::createSphere(int rings, int segments)
             float z = sin(phi) * sin(theta) * radius;
 
             // Текстурные координаты
-            // Инвертируем U координату для правильной ориентации текстуры
+            // Инвертируем только U координату, V оставляем как есть
             float u = 1.0f - static_cast<float>(segment) / segments;
-            float v = static_cast<float>(ring) / rings;
+            float v = static_cast<float>(ring) / rings;  // Убираем инверсию V
 
             // Нормаль (направлена наружу от центра сферы)
             float nx = sin(phi) * cos(theta);
@@ -177,15 +177,14 @@ void EarthRenderer::createSphere(int rings, int segments)
         }
     }
 
-    // Генерация индексов - меняем порядок вершин для правильной ориентации треугольников
+    // Генерация индексов
     for (int ring = 0; ring < rings; ++ring) {
         for (int segment = 0; segment < segments; ++segment) {
             GLuint current = ring * (segments + 1) + segment;
             GLuint next = current + segments + 1;
 
-            // Изменяем порядок вершин для правильной ориентации треугольников
-            indices << current << next << current + 1;
-            indices << current + 1 << next << next + 1;
+            indices << current << current + 1 << next;
+            indices << next << current + 1 << next + 1;
         }
     }
 
@@ -220,15 +219,9 @@ void EarthRenderer::createSphere(int rings, int segments)
     glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
                           reinterpret_cast<void*>(5 * sizeof(GLfloat)));
 
-    // Отвязываем VAO и буферы
     vao.release();
     indexBuffer.release();
     vbo.release();
-
-    // Настраиваем отсечение задних граней
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
 }
 
 GLint EarthRenderer::getMaxTextureSize()
@@ -268,24 +261,21 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     normalMapTiles->bindAllTiles();
     program.setUniformValue("normalMap", 2);
 
-    // Включаем необходимые состояния OpenGL
+    // Настройка отсечения граней
     glEnable(GL_DEPTH_TEST);
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
+    glDepthFunc(GL_LESS);
 
     glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);
-    glFrontFace(GL_CCW);
+    glCullFace(GL_BACK);    // Отсекаем задние грани
+    glFrontFace(GL_CCW);    // Передние грани определяются против часовой стрелки
+
     // Отрисовка
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
-    glDisable(GL_CULL_FACE);
 
-    // Отключаем состояния
+    // Возвращаем состояние OpenGL
     glDisable(GL_CULL_FACE);
     glDisable(GL_DEPTH_TEST);
 
-    // Освобождаем ресурсы
     vao.release();
     program.release();
 }
