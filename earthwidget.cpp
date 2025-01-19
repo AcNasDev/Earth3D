@@ -4,6 +4,7 @@
 #include <QTimer>
 #include <QPainter>
 #include <QtMath>
+#include <qimagereader.h>
 
 EarthWidget::EarthWidget(QWidget *parent)
     : QOpenGLWidget(parent)
@@ -13,6 +14,7 @@ EarthWidget::EarthWidget(QWidget *parent)
     , selectedSatelliteId(-1)
     , rotationAngle(0.0f)
 {
+    QImageReader::setAllocationLimit(0);
     setupSurfaceFormat();
     setFocusPolicy(Qt::StrongFocus);
     setUpdateBehavior(QOpenGLWidget::NoPartialUpdate);

@@ -58,7 +58,7 @@ void TileTextureManager::initialize()
 
 void TileTextureManager::loadAllTiles()
 {
-    QMutexLocker locker(&cacheMutex);
+    // QMutexLocker locker(&cacheMutex);
 
     for (int ring = 0; ring < rings; ++ring) {
         float v1 = static_cast<float>(ring) / rings;
@@ -99,6 +99,6 @@ void TileTextureManager::loadAllTiles()
 
 void TileTextureManager::bindAllTiles()
 {
-    QMutexLocker locker(&cacheMutex);
+    // QMutexLocker locker(&cacheMutex);
     glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 }

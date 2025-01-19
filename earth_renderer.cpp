@@ -139,10 +139,6 @@ void EarthRenderer::createSphere(int rings, int segments)
     QVector<GLfloat> vertices;
     QVector<GLuint> indices;
 
-    // Для каждого сегмента вычислим размер в текстурных координатах
-    float texSegmentWidth = 1.0f / segments;
-    float texRingHeight = 1.0f / rings;
-
     // Генерация вершин сферы
     for (int ring = 0; ring <= rings; ++ring) {
         float phi = ring * M_PI / rings;
@@ -162,23 +158,14 @@ void EarthRenderer::createSphere(int rings, int segments)
             float ny = cos(phi);
             float nz = sin(phi) * sin(theta);
 
-            // Определяем индексы тайла для текущей вершины
-            int tileX = segment * tilesX / segments;
-            int tileY = ring * tilesY / rings;
-
-            // Вычисляем локальные текстурные координаты внутри тайла
-            float localU = (u - tileX * texSegmentWidth) * segments;
-            float localV = (v - tileY * texRingHeight) * rings;
-
             // Добавляем вершину
-            vertices << x << y << z;          // позиция
-            vertices << localU << localV;     // локальные текстурные координаты
-            vertices << nx << ny << nz;       // нормаль
-            vertices << tileX << tileY;       // индексы тайла (как доп. атрибуты)
+            vertices << x << y << z;      // позиция
+            vertices << u << v;           // текстурные координаты
+            vertices << nx << ny << nz;   // нормаль
         }
     }
 
-    // Генерация индексов - без изменений
+    // Генерация индексов
     for (int ring = 0; ring < rings; ++ring) {
         for (int segment = 0; segment < segments; ++segment) {
             GLuint current = ring * (segments + 1) + segment;
@@ -189,16 +176,14 @@ void EarthRenderer::createSphere(int rings, int segments)
         }
     }
 
-    // Создаем VAO
-    vao.create();
-    vao.bind();
+    vertexCount = indices.size();
 
-    // Создаем VBO
+    // Создаем VBO и заполняем данными
     vbo.create();
     vbo.bind();
     vbo.allocate(vertices.constData(), vertices.size() * sizeof(GLfloat));
 
-    // Создаем IBO
+    // Создаем IBO и заполняем индексами
     indexBuffer.create();
     indexBuffer.bind();
     indexBuffer.allocate(indices.constData(), indices.size() * sizeof(GLuint));
@@ -206,28 +191,20 @@ void EarthRenderer::createSphere(int rings, int segments)
     // Настраиваем атрибуты вершин
     // Позиция (3 float)
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat), nullptr);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), nullptr);
 
     // Текстурные координаты (2 float)
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat),
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
                           reinterpret_cast<void*>(3 * sizeof(GLfloat)));
 
     // Нормаль (3 float)
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat),
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
                           reinterpret_cast<void*>(5 * sizeof(GLfloat)));
 
-    // Индексы тайла (2 float)
-    glEnableVertexAttribArray(3);
-    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(8 * sizeof(GLfloat)));
-
-    vertexCount = indices.size();
-
-    vao.release();
-    indexBuffer.release();
     vbo.release();
+    indexBuffer.release();
 }
 
 GLint EarthRenderer::getMaxTextureSize()
@@ -249,10 +226,6 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
-
-    // Передаем информацию о тайлах
-    program.setUniformValue("tilesX", earthTextureTiles->getTilesX());
-    program.setUniformValue("tilesY", earthTextureTiles->getTilesY());
 
     // Привязываем текстуры
     glActiveTexture(GL_TEXTURE0);
