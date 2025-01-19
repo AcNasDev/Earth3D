@@ -22,9 +22,32 @@ TileTextureManager::~TileTextureManager()
 
 void TileTextureManager::initialize()
 {
+    // Загружаем изображение
     sourceImage.load(imagePath);
+
     if (sourceImage.isNull()) {
-        qWarning() << "Failed to load image:" << imagePath;
+        qDebug() << "Failed to load image:" << imagePath;
+        return;
+    }
+
+    // Проверяем формат и конвертируем если нужно
+    if (sourceImage.format() != QImage::Format_RGBA8888) {
+        qDebug() << "Converting image from format" << sourceImage.format()
+        << "to Format_RGBA8888";
+        sourceImage = sourceImage.convertToFormat(QImage::Format_RGBA8888);
+    }
+
+    // Выводим информацию об изображении
+    qDebug() << "Source image loaded:"
+             << "\nPath:" << imagePath
+             << "\nSize:" << sourceImage.size()
+             << "\nFormat:" << sourceImage.format()
+             << "\nDepth:" << sourceImage.depth()
+             << "\nBytes per line:" << sourceImage.bytesPerLine();
+
+    // Проверяем, что изображение валидно после конвертации
+    if (sourceImage.isNull() || !sourceImage.valid(0, 0)) {
+        qDebug() << "Source image is invalid after conversion";
         return;
     }
 }
@@ -78,21 +101,49 @@ void TileTextureManager::loadTile(int ring, int segment)
     int width = bounds.width() * sourceImage.width();
     int height = bounds.height() * sourceImage.height();
 
-    // Вырезаем и создаем текстуру для тайла
+    // Вырезаем часть изображения
     QImage tileImage = sourceImage.copy(x, y, width, height);
+
+    // Конвертируем в формат RGBA8
+    tileImage = tileImage.convertToFormat(QImage::Format_RGBA8888);
+
+    // Проверяем, что изображение валидно
+    if (tileImage.isNull() || tileImage.width() <= 0 || tileImage.height() <= 0) {
+        qDebug() << "Invalid tile image for ring:" << ring << "segment:" << segment
+                 << "size:" << tileImage.size();
+        return;
+    }
 
     GLuint textureId;
     glGenTextures(1, &textureId);
     glBindTexture(GL_TEXTURE_2D, textureId);
 
-    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
-                 tileImage.width(), tileImage.height(), 0,
-                 GL_RGBA, GL_UNSIGNED_BYTE, tileImage.bits());
-
+    // Устанавливаем параметры текстуры
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Загружаем данные текстуры
+    GLenum format = GL_RGBA;
+    GLenum internalFormat = GL_RGBA8;
+
+    glTexImage2D(GL_TEXTURE_2D,
+                 0,                    // уровень мипмапа
+                 internalFormat,       // внутренний формат
+                 tileImage.width(),
+                 tileImage.height(),
+                 0,                    // границы
+                 format,              // формат входных данных
+                 GL_UNSIGNED_BYTE,    // тип входных данных
+                 tileImage.constBits());
+
+    // Проверяем ошибки OpenGL
+    GLenum err = glGetError();
+    if (err != GL_NO_ERROR) {
+        qDebug() << "OpenGL error when loading tile texture:" << err
+                 << "Ring:" << ring << "Segment:" << segment;
+    }
 
     // Сохраняем информацию о тайле
     Tile tile;
