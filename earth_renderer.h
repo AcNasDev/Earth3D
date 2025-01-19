@@ -23,8 +23,8 @@ private:
     GLint getMaxTextureSize();
 
     // Константы
-    static constexpr int RINGS = 64;
-    static constexpr int SEGMENTS = 64;
+    static constexpr int RINGS = 8;
+    static constexpr int SEGMENTS = 8;
 
     // Менеджеры текстур
     TileTextureManager* earthTextureTiles;

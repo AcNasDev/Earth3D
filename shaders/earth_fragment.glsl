@@ -8,28 +8,58 @@ in float Visibility;
 uniform sampler2D earthTexture;
 uniform sampler2D heightMap;
 uniform sampler2D normalMap;
+// Добавьте эти униформы в начало fragment shader
+uniform float gridThickness;
+uniform vec4 gridColor;
+uniform int numSegments;  // SEGMENTS
+uniform int numRings;     // RINGS
 
 out vec4 FragColor;
 
+bool isOnGrid(vec2 uv) {
+    // Вычисляем количество сегментов в UV-пространстве
+    float segments = numSegments; // SEGMENTS
+    float rings = numRings;    // RINGS
+
+    // Вычисляем расстояние до ближайшей линии сетки
+    float segmentSpacing = 1.0 / segments;
+    float ringSpacing = 1.0 / rings;
+
+    // Проверяем, находится ли точка рядом с линией сетки
+    float segmentDist = mod(uv.x, segmentSpacing);
+    float ringDist = mod(uv.y, ringSpacing);
+
+    segmentDist = min(segmentDist, segmentSpacing - segmentDist);
+    ringDist = min(ringDist, ringSpacing - ringDist);
+
+    return segmentDist < gridThickness || ringDist < gridThickness;
+}
+
 void main()
 {
-    // Отбрасываем фрагменты, не принадлежащие текущему сегменту
+    // Если фрагмент не принадлежит текущему сегменту, отбрасываем его
     if (Visibility < 0.5) {
         discard;
     }
 
-    vec4 color = texture(earthTexture, TexCoord);
-    vec4 heightValue = texture(heightMap, TexCoord);
-    vec3 normalValue = normalize(texture(normalMap, TexCoord).rgb * 2.0 - 1.0);
+    // Получаем цвет из текстуры
+    vec4 texColor = texture(earthTexture, TexCoord);
 
     // Базовое освещение
     vec3 lightDir = normalize(vec3(1.0, 1.0, 1.0));
     vec3 normal = normalize(WorldNormal);
 
+    float ambient = 0.2;
     float diffuse = max(dot(normal, lightDir), 0.0);
-    vec3 ambient = vec3(0.2);
 
-    vec3 finalColor = color.rgb * (ambient + diffuse);
+    // Применяем освещение к цвету текстуры
+    vec3 finalColor = texColor.rgb * (ambient + diffuse);
 
-    FragColor = vec4(finalColor, 1.0);
+    // Проверяем, находится ли фрагмент на линии сетки
+    if (isOnGrid(TexCoord)) {
+        // Смешиваем цвет текстуры с цветом сетки
+        FragColor = mix(vec4(finalColor, 1.0), gridColor, gridColor.a);
+    } else {
+        FragColor = vec4(finalColor, 1.0);
+    }
 }

@@ -146,18 +146,25 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
-    program.setUniformValue("viewProjection", viewProjection);
+    program.setUniformValue("gridThickness", 0.005f);
+    program.setUniformValue("gridColor", QVector4D(1.0f, 1.0f, 0.0f, 0.5f));
+    program.setUniformValue("numSegments", SEGMENTS);
+    program.setUniformValue("numRings", RINGS);
 
     // Настройка состояния OpenGL
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
     glCullFace(GL_BACK);
 
-    // Для каждого видимого сегмента привязываем соответствующие текстуры
+    // Для каждого видимого сегмента
     for (int ring = 0; ring < RINGS; ++ring) {
         for (int segment = 0; segment < SEGMENTS; ++segment) {
             if (earthTextureTiles->isTileVisible(ring, segment)) {
-                // Устанавливаем текстуры для текущего сегмента
+                // Устанавливаем текущий сегмент
+                program.setUniformValue("currentRing", ring);
+                program.setUniformValue("currentSegment", segment);
+
+                // Привязываем текстуры для текущего сегмента
                 glActiveTexture(GL_TEXTURE0);
                 earthTextureTiles->bindTileForSegment(ring, segment);
                 program.setUniformValue("earthTexture", 0);
@@ -170,14 +177,9 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
                 normalMapTiles->bindTileForSegment(ring, segment);
                 program.setUniformValue("normalMap", 2);
 
-                // Устанавливаем индексы текущего сегмента
-                program.setUniformValue("currentRing", ring);
-                program.setUniformValue("currentSegment", segment);
-
-                // Отрисовываем только индексы для текущего сегмента
-                int indexOffset = (ring * SEGMENTS + segment) * 6; // 6 индексов на сегмент
-                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT,
-                               reinterpret_cast<void*>(indexOffset * sizeof(GLuint)));
+                // Отрисовываем всю геометрию
+                // Шейдер сам отфильтрует ненужные фрагменты
+                glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
             }
         }
     }

@@ -8,9 +8,8 @@ layout(location = 3) in vec2 segmentIndex;
 uniform mat4 mvp;
 uniform mat4 model;
 uniform mat3 normalMatrix;
-uniform mat4 viewProjection;
-uniform int currentRing;
-uniform int currentSegment;
+uniform int currentRing;    // Текущий обрабатываемый ring
+uniform int currentSegment; // Текущий обрабатываемый segment
 
 out vec2 TexCoord;
 out vec3 WorldPos;
@@ -20,15 +19,17 @@ out float Visibility;
 void main()
 {
     // Проверяем, принадлежит ли вершина текущему сегменту
-    float isCurrentSegment = float(int(segmentIndex.x) == currentRing &&
-                                 int(segmentIndex.y) == currentSegment);
+    bool isCurrentSegment = (int(segmentIndex.x) == currentRing &&
+                            int(segmentIndex.y) == currentSegment);
 
     WorldPos = vec3(model * vec4(position, 1.0));
-    WorldNormal = normalMatrix * normal;
+    WorldNormal = normalize(normalMatrix * normal);
+
+    // Передаем текстурные координаты без изменений
     TexCoord = texCoord;
 
-    gl_Position = mvp * vec4(position, 1.0);
+    // Установка видимости для текущего сегмента
+    Visibility = float(isCurrentSegment);
 
-    // Если вершина не принадлежит текущему сегменту, делаем её невидимой
-    Visibility = isCurrentSegment;
+    gl_Position = mvp * vec4(position, 1.0);
 }
