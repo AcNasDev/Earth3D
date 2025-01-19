@@ -1,314 +1,104 @@
+// tile_texture_manager.cpp
 #include "tile_texture_manager.h"
 #include <QDebug>
-#include <QVector2D>
 #include <QImageReader>
 
-TileTextureManager::TileTextureManager(const QString& path, int size)
+TileTextureManager::TileTextureManager(const QString& path, int size, int sphereRings, int sphereSegments)
     : imagePath(path)
     , tileSize(size)
-    , tileCache(12)
     , textureArrayId(0)
+    , isInitialized(false)
+    , rings(sphereRings)
+    , segments(sphereSegments)
 {
-    QImageReader::setAllocationLimit(0);
-    qDebug() << "Created TileTextureManager for" << path
-             << "with tile size" << size;
+    initializeOpenGLFunctions();
 }
 
 TileTextureManager::~TileTextureManager()
 {
     if (textureArrayId) {
         glDeleteTextures(1, &textureArrayId);
-        textureArrayId = 0;
     }
 }
 
 void TileTextureManager::initialize()
 {
-    // Загружаем изображение с проверкой формата
-    sourceImage.load(imagePath);
-    if (sourceImage.isNull()) {
+    if (isInitialized) return;
+
+    // Загружаем полное изображение
+    fullImage = QImage(imagePath);
+    if (fullImage.isNull()) {
         qWarning() << "Failed to load image:" << imagePath;
         return;
     }
 
-    // Проверяем и конвертируем формат всего изображения сразу
-    if (sourceImage.format() != QImage::Format_RGBA8888) {
-        qDebug() << "Converting image format from" << sourceImage.format() << "to RGBA8888";
-        sourceImage = sourceImage.convertToFormat(QImage::Format_RGBA8888);
+    // Конвертируем в RGBA формат если нужно
+    if (fullImage.format() != QImage::Format_RGBA8888) {
+        fullImage = fullImage.convertToFormat(QImage::Format_RGBA8888);
     }
 
-    originalSize = sourceImage.size();
-    tilesX = (originalSize.width() + tileSize - 1) / tileSize;
-    tilesY = (originalSize.height() + tileSize - 1) / tileSize;
+    // Создаем текстурный массив
+    glGenTextures(1, &textureArrayId);
+    glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 
-    qDebug() << "TileTextureManager initialized:"
-             << "\nImage:" << imagePath
-             << "\nSize:" << originalSize
-             << "\nFormat:" << sourceImage.format()
-             << "\nTiles:" << tilesX << "x" << tilesY;
+    // Создаем хранилище для всех сегментов
+    int totalLayers = rings * segments;
+    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
+                 tileSize, tileSize, totalLayers,
+                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
 
-    // Предварительно вычисляем информацию о тайлах
-    tilesInfo.clear();
-    tilesInfo.reserve(tilesX * tilesY); // Резервируем память
-    for (int y = 0; y < tilesY; ++y) {
-        for (int x = 0; x < tilesX; ++x) {
-            tilesInfo.append(calculateTileInfo(QPoint(x, y)));
-        }
-    }
+    // Настраиваем параметры текстуры
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
 
-    // Устанавливаем размер кэша
-    tileCache.setMaxCost(tilesX * tilesY);
-}
-
-void TileTextureManager::initializeTiles()
-{
-    tiles.clear();
-    tiles.resize(tilesX * tilesY);
-
-    for (int y = 0; y < tilesY; ++y) {
-        for (int x = 0; x < tilesX; ++x) {
-            Tile& tile = tiles[y * tilesX + x];
-            tile.gridPos = QPoint(x, y);
-            tile.region = QRect(x * tileSize, y * tileSize,
-                                qMin(tileSize, originalSize.width() - x * tileSize),
-                                qMin(tileSize, originalSize.height() - y * tileSize));
-        }
-    }
-}
-
-void TileTextureManager::loadTile(int x, int y)
-{
-    QMutexLocker locker(&cacheMutex);
-    QPoint tilePos(x, y);
-
-    if (tileCache.contains(tilePos)) {
-        return;
-    }
-
-    // Вычисляем размер текущего тайла
-    int currentTileWidth = qMin(tileSize, originalSize.width() - x * tileSize);
-    int currentTileHeight = qMin(tileSize, originalSize.height() - y * tileSize);
-
-    QRect region(x * tileSize, y * tileSize, currentTileWidth, currentTileHeight);
-
-    // Создаем текстуру перед копированием изображения
-    QOpenGLTexture* texture = new QOpenGLTexture(QOpenGLTexture::Target2D);
-
-    try {
-        // Проверяем формат исходного изображения
-        QImage::Format desiredFormat = QImage::Format_RGBA8888;
-        QImage tileImage;
-
-        if (sourceImage.format() != desiredFormat) {
-            // Конвертируем только нужный регион
-            tileImage = sourceImage.copy(region).convertToFormat(desiredFormat);
-        } else {
-            tileImage = sourceImage.copy(region);
-        }
-
-        // Проверяем успешность создания тайла
-        if (tileImage.isNull()) {
-            qWarning() << "Failed to create tile image at" << x << y;
-            delete texture;
-            return;
-        }
-
-        // Настраиваем текстуру
-        texture->setFormat(QOpenGLTexture::RGBA8_UNorm);
-        texture->setSize(tileImage.width(), tileImage.height());
-        texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
-        texture->setMagnificationFilter(QOpenGLTexture::Linear);
-        texture->setWrapMode(QOpenGLTexture::ClampToEdge);
-        texture->setAutoMipMapGenerationEnabled(true);
-
-        // Выделяем память и загружаем данные
-        texture->allocateStorage();
-        texture->setData(
-            0, // уровень мипмапа
-            0, // слой
-            QOpenGLTexture::RGBA,
-            QOpenGLTexture::UInt8,
-            tileImage.constBits(),
-            nullptr // настройки
-            );
-
-        // Генерируем мипмапы после загрузки данных
-        texture->generateMipMaps();
-
-        // Добавляем в кэш только если всё успешно
-        tileCache.insert(tilePos, texture);
-
-        qDebug() << "Successfully loaded tile" << tilePos
-                 << "Size:" << tileImage.size()
-                 << "Format:" << tileImage.format();
-
-    } catch (const std::exception& e) {
-        qWarning() << "Exception while loading tile" << tilePos << ":" << e.what();
-        delete texture;
-    }
-}
-
-QPoint TileTextureManager::texCoordToTile(const QVector2D& texCoord)
-{
-    // Преобразуем текстурные координаты [0,1] в координаты тайла
-    float x = texCoord.x() * tilesX;
-    float y = texCoord.y() * tilesY;
-
-    // Возвращаем позицию тайла
-    return QPoint(static_cast<int>(x), static_cast<int>(y));
-}
-
-void TileTextureManager::bindTileForCoordinate(const QVector2D& texCoord)
-{
-    qDebug() << "Binding tile for coordinate:" << texCoord;
-
-    // Убедимся, что координаты в правильном диапазоне
-    float x = qBound(0.0f, texCoord.x(), 1.0f);
-    float y = qBound(0.0f, texCoord.y(), 1.0f);
-
-    QPoint tilePos = texCoordToTile(QVector2D(x, y));
-    qDebug() << "Calculated tile position:" << tilePos;
-
-    if (tilePos.x() >= 0 && tilePos.x() < tilesX &&
-        tilePos.y() >= 0 && tilePos.y() < tilesY) {
-
-        if (!tileCache.contains(tilePos)) {
-            loadTile(tilePos.x(), tilePos.y());
-        }
-
-        QOpenGLTexture* texture = tileCache.object(tilePos);
-        if (texture) {
-            texture->bind();
-            qDebug() << "Bound texture for tile:" << tilePos
-                     << "Size:" << texture->width() << "x" << texture->height();
-        }
-    }
-}
-
-QVector4D TileTextureManager::getCurrentTileInfo(const QVector2D& texCoord)
-{
-    QPoint tilePos = texCoordToTile(texCoord);
-    return calculateTileInfo(tilePos);
-}
-
-QVector4D TileTextureManager::calculateTileInfo(const QPoint& tilePos)
-{
-    // Проверяем границы
-    if (tilePos.x() < 0 || tilePos.x() >= tilesX ||
-        tilePos.y() < 0 || tilePos.y() >= tilesY) {
-        qWarning() << "Invalid tile position:" << tilePos;
-        return QVector4D(0, 0, 1, 1);
-    }
-
-    // Вычисляем смещение тайла в нормализованных координатах [0,1]
-    float offsetX = static_cast<float>(tilePos.x() * tileSize) / originalSize.width();
-    float offsetY = static_cast<float>(tilePos.y() * tileSize) / originalSize.height();
-
-    // Вычисляем размер тайла в нормализованных координатах
-    float scaleX = static_cast<float>(tileSize) / originalSize.width();
-    float scaleY = static_cast<float>(tileSize) / originalSize.height();
-
-    // Корректируем размер для последних тайлов
-    if (tilePos.x() == tilesX - 1) {
-        int lastTileWidth = originalSize.width() - (tilesX - 1) * tileSize;
-        scaleX = static_cast<float>(lastTileWidth) / originalSize.width();
-    }
-    if (tilePos.y() == tilesY - 1) {
-        int lastTileHeight = originalSize.height() - (tilesY - 1) * tileSize;
-        scaleY = static_cast<float>(lastTileHeight) / originalSize.height();
-    }
-
-    qDebug() << "Tile info calculated for" << tilePos
-             << "\nOffset:" << offsetX << offsetY
-             << "\nScale:" << scaleX << scaleY;
-
-    return QVector4D(offsetX, offsetY, scaleX, scaleY);
+    isInitialized = true;
 }
 
 void TileTextureManager::loadAllTiles()
 {
-    for (int y = 0; y < tilesY; ++y) {
-        for (int x = 0; x < tilesX; ++x) {
-            QPoint tilePos(x, y);
-            if (!tileCache.contains(tilePos)) {
-                loadTile(x, y);
-            }
-            tilesInfo.append(calculateTileInfo(tilePos));
+    QMutexLocker locker(&cacheMutex);
+
+    for (int ring = 0; ring < rings; ++ring) {
+        float v1 = static_cast<float>(ring) / rings;
+        float v2 = static_cast<float>(ring + 1) / rings;
+
+        for (int seg = 0; seg < segments; ++seg) {
+            float u1 = 1.0f - static_cast<float>(seg + 1) / segments;
+            float u2 = 1.0f - static_cast<float>(seg) / segments;
+
+            // Вычисляем пиксельные координаты в исходном изображении
+            int startX = static_cast<int>(u1 * fullImage.width());
+            int endX = static_cast<int>(u2 * fullImage.width());
+            int startY = static_cast<int>(v1 * fullImage.height());
+            int endY = static_cast<int>(v2 * fullImage.height());
+
+            // Вырезаем и масштабируем изображение для текущего сегмента
+            QImage segmentImage = fullImage.copy(
+                                               startX, startY,
+                                               endX - startX,
+                                               endY - startY
+                                               ).scaled(
+                                          tileSize, tileSize,
+                                          Qt::IgnoreAspectRatio,
+                                          Qt::SmoothTransformation
+                                          );
+
+            // Загружаем в текстурный массив
+            int layer = ring * segments + seg;
+            glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
+            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
+                            0, 0, layer,
+                            tileSize, tileSize, 1,
+                            GL_RGBA, GL_UNSIGNED_BYTE,
+                            segmentImage.constBits());
         }
     }
-    qDebug() << "Loaded all tiles:" << tilesX * tilesY;
-}
-
-QVector<QVector4D> TileTextureManager::getAllTilesInfo() const
-{
-    return tilesInfo;
 }
 
 void TileTextureManager::bindAllTiles()
 {
     QMutexLocker locker(&cacheMutex);
-
-    if (tilesX <= 0 || tilesY <= 0) {
-        qWarning() << "No tiles to bind";
-        return;
-    }
-
-    if (!textureArrayId) {
-        glGenTextures(1, &textureArrayId);
-        glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-
-        // Используем GL_RGBA8 для лучшего качества
-        glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
-                     tileSize, tileSize, tilesX * tilesY,
-                     0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-        // Настраиваем фильтрацию и устраняем артефакты на краях тайлов
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-        // Добавляем небольшое размытие на границах для устранения артефактов
-        glTexParameterf(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAX_ANISOTROPY_EXT, 16.0f);
-
-        int layer = 0;
-        for (int y = 0; y < tilesY; ++y) {
-            for (int x = 0; x < tilesX; ++x) {
-                QPoint tilePos(x, y);
-
-                // Принудительно загружаем тайл, если его нет
-                if (!tileCache.contains(tilePos)) {
-                    loadTile(x, y);
-                }
-
-                QOpenGLTexture* tile = tileCache.object(tilePos);
-                if (tile && tile->isCreated()) {
-                    // Создаем буфер для данных текстуры
-                    QVector<GLubyte> pixels(tileSize * tileSize * 4);
-
-                    glBindTexture(GL_TEXTURE_2D, tile->textureId());
-                    glGetTexImage(GL_TEXTURE_2D, 0, GL_RGBA, GL_UNSIGNED_BYTE, pixels.data());
-
-                    // Проверяем, что данные действительно получены
-                    if (!pixels.isEmpty()) {
-                        glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-                        glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
-                                        0, 0, layer,
-                                        tileSize, tileSize, 1,
-                                        GL_RGBA, GL_UNSIGNED_BYTE,
-                                        pixels.data());
-
-                        qDebug() << "Successfully loaded tile" << x << y << "to layer" << layer;
-                    } else {
-                        qWarning() << "Failed to get texture data for tile" << x << y;
-                    }
-                    layer++;
-                } else {
-                    qWarning() << "Failed to load tile at" << x << y;
-                }
-            }
-        }
-    }
-
     glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
 }

@@ -108,25 +108,15 @@ void EarthRenderer::initTextures()
              << "\nNormal map:" << normalMap.size()
              << "\nOptimal tile size:" << tileSize;
 
-    // Создаем менеджеры тайлов с одинаковым размером тайла
-    earthTextureTiles = new TileTextureManager(buildDir + "/textures/earth.jpg", tileSize);
-    heightMapTiles = new TileTextureManager(buildDir + "/textures/earth_height.png", tileSize);
-    normalMapTiles = new TileTextureManager(buildDir + "/textures/earth_normal.png", tileSize);
+    // Создаем менеджеры тайлов с параметрами сферы
+    earthTextureTiles = new TileTextureManager(buildDir + "/textures/earth.jpg", tileSize, RINGS, SEGMENTS);
+    heightMapTiles = new TileTextureManager(buildDir + "/textures/earth_height.png", tileSize, RINGS, SEGMENTS);
+    normalMapTiles = new TileTextureManager(buildDir + "/textures/earth_normal.png", tileSize, RINGS, SEGMENTS);
 
     // Инициализируем менеджеры
     earthTextureTiles->initialize();
     heightMapTiles->initialize();
     normalMapTiles->initialize();
-
-    // Проверяем количество тайлов
-    int earthTilesCount = earthTextureTiles->getTilesX() * earthTextureTiles->getTilesY();
-    int heightTilesCount = heightMapTiles->getTilesX() * heightMapTiles->getTilesY();
-    int normalTilesCount = normalMapTiles->getTilesX() * normalMapTiles->getTilesY();
-
-    qDebug() << "Tiles count:"
-             << "\nEarth texture:" << earthTilesCount
-             << "\nHeight map:" << heightTilesCount
-             << "\nNormal map:" << normalTilesCount;
 
     texturesInitialized = true;
 }
@@ -149,35 +139,46 @@ void EarthRenderer::createSphere(int rings, int segments)
     QVector<GLfloat> vertices;
     QVector<GLuint> indices;
 
+    // Для каждого сегмента вычислим размер в текстурных координатах
+    float texSegmentWidth = 1.0f / segments;
+    float texRingHeight = 1.0f / rings;
+
     // Генерация вершин сферы
     for (int ring = 0; ring <= rings; ++ring) {
         float phi = ring * M_PI / rings;
+        float v = static_cast<float>(ring) / rings; // Текстурная координата V
+
         for (int segment = 0; segment <= segments; ++segment) {
             float theta = segment * 2.0f * M_PI / segments;
+            float u = 1.0f - static_cast<float>(segment) / segments; // Текстурная координата U
 
             // Позиция
             float x = sin(phi) * cos(theta) * radius;
             float y = cos(phi) * radius;
             float z = sin(phi) * sin(theta) * radius;
 
-            // Текстурные координаты
-            // Инвертируем только U координату, V оставляем как есть
-            float u = 1.0f - static_cast<float>(segment) / segments;
-            float v = static_cast<float>(ring) / rings;  // Убираем инверсию V
-
-            // Нормаль (направлена наружу от центра сферы)
+            // Нормаль
             float nx = sin(phi) * cos(theta);
             float ny = cos(phi);
             float nz = sin(phi) * sin(theta);
 
+            // Определяем индексы тайла для текущей вершины
+            int tileX = segment * tilesX / segments;
+            int tileY = ring * tilesY / rings;
+
+            // Вычисляем локальные текстурные координаты внутри тайла
+            float localU = (u - tileX * texSegmentWidth) * segments;
+            float localV = (v - tileY * texRingHeight) * rings;
+
             // Добавляем вершину
-            vertices << x << y << z;      // позиция
-            vertices << u << v;           // текстурные координаты
-            vertices << nx << ny << nz;   // нормаль
+            vertices << x << y << z;          // позиция
+            vertices << localU << localV;     // локальные текстурные координаты
+            vertices << nx << ny << nz;       // нормаль
+            vertices << tileX << tileY;       // индексы тайла (как доп. атрибуты)
         }
     }
 
-    // Генерация индексов
+    // Генерация индексов - без изменений
     for (int ring = 0; ring < rings; ++ring) {
         for (int segment = 0; segment < segments; ++segment) {
             GLuint current = ring * (segments + 1) + segment;
@@ -188,36 +189,41 @@ void EarthRenderer::createSphere(int rings, int segments)
         }
     }
 
-    vertexCount = indices.size();
-
-    // Создаем и привязываем VAO
+    // Создаем VAO
     vao.create();
     vao.bind();
 
-    // Создаем, привязываем и заполняем VBO
+    // Создаем VBO
     vbo.create();
     vbo.bind();
     vbo.allocate(vertices.constData(), vertices.size() * sizeof(GLfloat));
 
-    // Создаем, привязываем и заполняем IBO
+    // Создаем IBO
     indexBuffer.create();
     indexBuffer.bind();
     indexBuffer.allocate(indices.constData(), indices.size() * sizeof(GLuint));
 
     // Настраиваем атрибуты вершин
-    // Позиция
+    // Позиция (3 float)
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), nullptr);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat), nullptr);
 
-    // Текстурные координаты
+    // Текстурные координаты (2 float)
     glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat),
                           reinterpret_cast<void*>(3 * sizeof(GLfloat)));
 
-    // Нормаль
+    // Нормаль (3 float)
     glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
+    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat),
                           reinterpret_cast<void*>(5 * sizeof(GLfloat)));
+
+    // Индексы тайла (2 float)
+    glEnableVertexAttribArray(3);
+    glVertexAttribPointer(3, 2, GL_FLOAT, GL_FALSE, 10 * sizeof(GLfloat),
+                          reinterpret_cast<void*>(8 * sizeof(GLfloat)));
+
+    vertexCount = indices.size();
 
     vao.release();
     indexBuffer.release();
