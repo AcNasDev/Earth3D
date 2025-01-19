@@ -1,29 +1,50 @@
 #include "satellite_info_renderer.h"
 #include <QFontMetrics>
 #include <QPainter>
+#include <QDebug>  // Добавлено для отладки
 
 SatelliteInfoRenderer::SatelliteInfoRenderer()
     : vbo(QOpenGLBuffer::VertexBuffer)
     , texture(nullptr)
+    , isInitialized(false)
 {
+    // Перенесено в initialize()
 }
 
 SatelliteInfoRenderer::~SatelliteInfoRenderer()
 {
     if (vbo.isCreated())
         vbo.destroy();
-    delete texture;
+    if (texture) {
+        texture->destroy();
+        delete texture;
+    }
 }
 
-void SatelliteInfoRenderer::initialize()
+bool SatelliteInfoRenderer::initialize()
 {
-    initShaders();
-    initGeometry();
+    if (!initializeOpenGLFunctions()) {
+        qDebug() << "Failed to initialize OpenGL functions";
+        return false;
+    }
+
+    if (!initShaders()) {
+        qDebug() << "Failed to initialize shaders";
+        return false;
+    }
+
+    if (!initGeometry()) {
+        qDebug() << "Failed to initialize geometry";
+        return false;
+    }
+
+    isInitialized = true;
+    return true;
 }
 
-void SatelliteInfoRenderer::initShaders()
+bool SatelliteInfoRenderer::initShaders()
 {
-    // Vertex shader для billboard эффекта
+    // Vertex shader
     const char* vertexShaderSource = R"(
         #version 330 core
         layout(location = 0) in vec3 position;
@@ -44,7 +65,7 @@ void SatelliteInfoRenderer::initShaders()
         }
     )";
 
-    // Fragment shader для отрисовки текстуры
+    // Fragment shader
     const char* fragmentShaderSource = R"(
         #version 330 core
         in vec2 TexCoord;
@@ -58,14 +79,27 @@ void SatelliteInfoRenderer::initShaders()
         }
     )";
 
-    program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource);
-    program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource);
-    program.link();
+    // Проверка компиляции и линковки шейдеров
+    if (!program.addShaderFromSourceCode(QOpenGLShader::Vertex, vertexShaderSource)) {
+        qDebug() << "Vertex shader compilation failed:" << program.log();
+        return false;
+    }
+
+    if (!program.addShaderFromSourceCode(QOpenGLShader::Fragment, fragmentShaderSource)) {
+        qDebug() << "Fragment shader compilation failed:" << program.log();
+        return false;
+    }
+
+    if (!program.link()) {
+        qDebug() << "Shader program linking failed:" << program.log();
+        return false;
+    }
+
+    return true;
 }
 
-void SatelliteInfoRenderer::initGeometry()
+bool SatelliteInfoRenderer::initGeometry()
 {
-    // Создаем простой прямоугольник для отрисовки текстуры
     float vertices[] = {
         // Позиции    // Текстурные координаты
         -0.5f,  0.5f, 0.0f,   0.0f, 0.0f,
@@ -74,12 +108,24 @@ void SatelliteInfoRenderer::initGeometry()
         -0.5f, -0.5f, 0.0f,   0.0f, 1.0f
     };
 
-    vao.create();
+    if (!vao.create()) {
+        qDebug() << "Failed to create VAO";
+        return false;
+    }
     vao.bind();
 
-    vbo.create();
+    if (!vbo.create()) {
+        qDebug() << "Failed to create VBO";
+        return false;
+    }
     vbo.bind();
     vbo.allocate(vertices, sizeof(vertices));
+
+    // Проверяем, что программа активна
+    if (!program.bind()) {
+        qDebug() << "Failed to bind shader program";
+        return false;
+    }
 
     // Настройка атрибутов вершин
     program.enableAttributeArray(0);
@@ -89,26 +135,9 @@ void SatelliteInfoRenderer::initGeometry()
     program.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(float), 2, 5 * sizeof(float));
 
     vao.release();
-}
+    program.release();
 
-QImage SatelliteInfoRenderer::createTextImage(const QString& text)
-{
-    QFont font("Arial", 12);
-    QFontMetrics fm(font);
-    QSize textSize = fm.size(Qt::TextSingleLine, text);
-
-    // Создаем изображение с прозрачным фоном
-    QImage image(textSize.width() + 10, textSize.height() + 10, QImage::Format_RGBA8888);
-    image.fill(Qt::transparent);
-
-    // Используем QPainter только для создания текстуры
-    QPainter painter(&image);
-    painter.setFont(font);
-    painter.setPen(Qt::white);
-    painter.drawText(5, fm.ascent() + 5, text);
-    painter.end();
-
-    return image;
+    return true;
 }
 
 void SatelliteInfoRenderer::updateInfoTexture(const Satellite& satellite)
@@ -116,17 +145,30 @@ void SatelliteInfoRenderer::updateInfoTexture(const Satellite& satellite)
     QString info = QString("ID: %1\n%2").arg(satellite.id).arg(satellite.info);
     QImage textImage = createTextImage(info);
 
-    delete texture;
+    if (texture) {
+        texture->destroy();
+        delete texture;
+    }
+
     texture = new QOpenGLTexture(textImage);
+    if (!texture->isCreated()) {
+        qDebug() << "Failed to create texture";
+        delete texture;
+        texture = nullptr;
+        return;
+    }
+
     texture->setMinificationFilter(QOpenGLTexture::Linear);
     texture->setMagnificationFilter(QOpenGLTexture::Linear);
+    texture->setWrapMode(QOpenGLTexture::ClampToEdge);
 }
 
 void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
                                    const QMatrix4x4& model, const Satellite& satellite)
 {
-    if (!texture)
-        updateInfoTexture(satellite);
+    if (!isInitialized || !texture) {
+        return;
+    }
 
     program.bind();
     vao.bind();
@@ -141,13 +183,36 @@ void SatelliteInfoRenderer::render(const QMatrix4x4& projection, const QMatrix4x
     program.setUniformValue("billboardSize", QVector2D(BILLBOARD_SIZE, BILLBOARD_SIZE));
     program.setUniformValue("textTexture", 0);
 
-    // Отрисовка
+    // Включаем прозрачность
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    // Отрисовка
     glDrawArrays(GL_TRIANGLE_FAN, 0, 4);
+
+    // Отключаем прозрачность
     glDisable(GL_BLEND);
 
     texture->release();
     vao.release();
     program.release();
+}
+
+QImage SatelliteInfoRenderer::createTextImage(const QString& text)
+{
+    QFont font("Arial", 12);
+    QFontMetrics fm(font);
+    QSize textSize = fm.size(Qt::TextSingleLine, text);
+
+    // Создаем изображение с прозрачным фоном
+    QImage image(textSize.width() + 10, textSize.height() + 10, QImage::Format_RGBA8888);
+    image.fill(Qt::transparent);
+
+    QPainter painter(&image);
+    painter.setFont(font);
+    painter.setPen(Qt::white);
+    painter.drawText(5, fm.ascent() + 5, text);
+    painter.end();
+
+    return image;
 }

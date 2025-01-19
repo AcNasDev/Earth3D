@@ -1,7 +1,7 @@
 #ifndef SATELLITE_INFO_RENDERER_H
 #define SATELLITE_INFO_RENDERER_H
 
-#include <QOpenGLFunctions>
+#include <QOpenGLFunctions_3_3_Core>  // Изменено для явного указания версии OpenGL
 #include <QOpenGLBuffer>
 #include <QOpenGLVertexArrayObject>
 #include <QOpenGLShaderProgram>
@@ -10,29 +10,30 @@
 #include <QFont>
 #include "satellite.h"
 
-class SatelliteInfoRenderer : protected QOpenGLFunctions
+class SatelliteInfoRenderer : protected QOpenGLFunctions_3_3_Core  // Изменено
 {
 public:
-    SatelliteInfoRenderer();
+    explicit SatelliteInfoRenderer();
     ~SatelliteInfoRenderer();
 
-    void initialize();
+    bool initialize();  // Добавлен возврат bool для проверки успешности
     void render(const QMatrix4x4& projection, const QMatrix4x4& view,
                 const QMatrix4x4& model, const Satellite& satellite);
     void updateInfoTexture(const Satellite& satellite);
 
 private:
-    void initShaders();
-    void initGeometry();
+    bool initShaders();    // Изменено для возврата статуса
+    bool initGeometry();   // Изменено для возврата статуса
     QImage createTextImage(const QString& text);
 
     QOpenGLShaderProgram program;
     QOpenGLBuffer vbo;
     QOpenGLVertexArrayObject vao;
     QOpenGLTexture* texture;
+    bool isInitialized;    // Добавлено
 
-    static constexpr float BILLBOARD_SIZE = 0.2f; // Размер информационной панели
-    static constexpr float OFFSET = 0.3f;         // Смещение от позиции спутника
+    static constexpr float BILLBOARD_SIZE = 0.2f;
+    static constexpr float OFFSET = 0.3f;
 };
 
-#endif // SATELLITE_INFO_RENDERER_H
+#endif
