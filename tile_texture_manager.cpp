@@ -23,6 +23,7 @@ void TileTextureManager::initialize() {
         qWarning() << "Failed to load source image:" << imagePath;
         return;
     }
+    sourceImage = sourceImage.mirrored(true, false);
 
     // Создаем атлас текстур
     tilesPerRow = std::ceil(std::sqrt(numRings * numSegments));
