@@ -6,15 +6,18 @@
 TileTextureManager::TileTextureManager(const QString& path, int size)
     : imagePath(path)
     , tileSize(size)
-    , tileCache(12)
-    , textureArray(nullptr)
+    , tileCache(128)
+    , textureArrayId(0)
+    , isTextureArrayInitialized(false)
 {
     QImageReader::setAllocationLimit(0);
 }
 
 TileTextureManager::~TileTextureManager()
 {
-    delete textureArray;
+    if (textureArrayId) {
+        glDeleteTextures(1, &textureArrayId);
+    }
 }
 
 void TileTextureManager::initialize()

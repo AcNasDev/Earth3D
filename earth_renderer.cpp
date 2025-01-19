@@ -228,16 +228,17 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.bind();
     vao.bind();
 
+    // Матрицы
     QMatrix4x4 mvp = projection * view * model;
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
 
-    // Устанавливаем количество тайлов
+    // Передаем количество тайлов
     program.setUniformValue("tilesX", earthTextureTiles->getTilesX());
     program.setUniformValue("tilesY", earthTextureTiles->getTilesY());
 
-    // Привязываем текстурные массивы
+    // Привязываем текстуры
     glActiveTexture(GL_TEXTURE0);
     earthTextureTiles->bindAllTiles();
     program.setUniformValue("earthTexture", 0);
