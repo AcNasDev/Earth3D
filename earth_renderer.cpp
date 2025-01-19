@@ -211,6 +211,9 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
         program.setUniformValue("normalMap", 2);
     }
 
+    QVector3D cameraPos = view.inverted().column(3).toVector3D();
+    program.setUniformValue("viewPos", cameraPos);
+
     // Рендерим сферу
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
 

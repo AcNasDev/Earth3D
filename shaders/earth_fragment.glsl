@@ -12,50 +12,63 @@ out vec4 FragColor;
 
 void main()
 {
+    // Базовые векторы
     vec3 viewDir = normalize(viewPos - WorldPos);
-    float visibility = dot(normalize(WorldNormal), viewDir);
+    vec3 normal = normalize(WorldNormal);
 
-    // Отсекаем фрагменты с обратной стороны, где есть высота
-    if(visibility < 0.0 && texture(heightMap, TexCoord).r > 0.01) {
-        discard;
-    }
-    // Базовый цвет текстуры
+    // Направление света следует за камерой с небольшим смещением
+    vec3 lightDir = normalize(viewDir + vec3(0.0, 0.3, 0.0));
+
+    // Получаем цвет и высоту
     vec4 baseColor = texture(earthTexture, TexCoord);
     float height = texture(heightMap, TexCoord).r;
 
-    // Нормализованные векторы
-    vec3 normal = normalize(WorldNormal);
-    vec3 toLight = normalize(viewPos - WorldPos);
+    // Базовые параметры освещения
+    float ambientStrength = 0.5;
+    float diffuseStrength = 0.5;
 
-    // Параметры освещения
-    float ambientStrength = 0.3;  // Увеличили ambient для лучшей видимости
-    float diffuseStrength = 0.7;
-    vec3 lightColor = vec3(1.0);
+    // Вычисляем базовое освещение
+    float NdotL = max(dot(normal, lightDir), 0.0);
+    float NdotV = max(dot(normal, viewDir), 0.0);
 
-    // Ambient
-    vec3 ambient = ambientStrength * lightColor;
+    // Рассчитываем диффузное освещение с плавным переходом
+    float diff = smoothstep(0.0, 1.0, NdotL);
 
-    // Diffuse с коррекцией для вертикального угла
-    float NdotL = dot(normal, toLight);
-    float diff = max(NdotL, 0.0);
+    // Коэффициент высоты
+    float heightFactor = smoothstep(0.1, 0.8, height);
 
-    // Корректируем освещение, чтобы оно было равномерным при взгляде сверху/снизу
-    vec3 upVector = normalize(vec3(0.0, 1.0, 0.0));
-    float verticalFactor = abs(dot(toLight, upVector));
-    diff = mix(diff, max(diff, 0.5), verticalFactor);
+    // Фактор выравнивания освещения в зависимости от угла обзора
+    float viewCorrection = mix(0.7, 1.0, NdotV);
 
-    vec3 diffuse = diffuseStrength * diff * lightColor;
+    // Рассчитываем базовое освещение
+    vec3 ambient = vec3(ambientStrength);
+    vec3 diffuse = vec3(diff * diffuseStrength * viewCorrection);
 
-    // Добавляем эффект высоты
-    float heightFactor = 1.0 + height * 0.3;
+    // Основное освещение
+    vec3 lightColor = ambient + diffuse;
 
-    // Комбинируем все компоненты
-    vec3 result = (ambient + diffuse) * baseColor.rgb * heightFactor;
+    // Специальная обработка для гор
+    if(height > 0.1) {
+        // Увеличиваем яркость для гор с учетом угла обзора
+        float mountainBrightness = mix(1.0, 1.3, heightFactor * viewCorrection);
 
-    // Добавляем мягкое затемнение на теневой стороне
-    float facing = dot(normal, toLight);
-    float shadowFactor = smoothstep(-0.5, 0.5, facing);
-    result = mix(result * 0.4, result, shadowFactor);
+        // Усиливаем цвет гор
+        vec3 mountainColor = baseColor.rgb * mountainBrightness;
 
-    FragColor = vec4(result, 1.0);
+        // Применяем освещение с сохранением яркости гор
+        vec3 litMountain = mountainColor * lightColor;
+
+        // Обеспечиваем минимальную яркость для гор с учетом угла обзора
+        float minBrightness = mix(0.6, 0.8, heightFactor * viewCorrection);
+        litMountain = max(litMountain, mountainColor * minBrightness);
+
+        // Финальное смешивание с учетом высоты
+        FragColor = vec4(mix(baseColor.rgb * lightColor, litMountain, heightFactor), 1.0);
+    } else {
+        // Для низких участков используем скорректированное освещение
+        vec3 litSurface = baseColor.rgb * lightColor * viewCorrection;
+        float minLowBrightness = 0.5;
+        litSurface = max(litSurface, baseColor.rgb * minLowBrightness);
+        FragColor = vec4(litSurface, 1.0);
+    }
 }

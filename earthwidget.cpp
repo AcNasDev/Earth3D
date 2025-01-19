@@ -69,18 +69,26 @@ void EarthWidget::initializeGL()
     }
 
     // Теперь можно инициализировать рендереры
-    glCullFace(GL_BACK);
     earthRenderer->initialize();
     satelliteRenderer->initialize();
     trajectoryRenderer->initialize();
 
+    // Настройка параметров рендеринга
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+    // Включаем и настраиваем тест глубины
     glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LESS);  // Добавлено: стандартная функция теста глубины
+    glDepthMask(GL_TRUE);  // Добавлено: разрешаем запись в буфер глубины
+
+    // Включаем отсечение задних граней
     glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);   // Добавлено: отсекаем задние грани
+    glFrontFace(GL_CCW);   // Добавлено: определяем порядок вершин для передней грани
+
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthFunc(GL_LEQUAL); // Добавить эту строку
 }
 
 void EarthWidget::resizeGL(int w, int h)
@@ -92,7 +100,11 @@ void EarthWidget::resizeGL(int w, int h)
 
 void EarthWidget::paintGL()
 {
+    // Очищаем буферы цвета и глубины
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+
+    // Убеждаемся, что тест глубины включен
+    glEnable(GL_DEPTH_TEST);
 
     model.setToIdentity();
     model.rotate(rotationAngle, 0, 1, 0);
