@@ -3,7 +3,6 @@
 
 #include "renderer.h"
 #include "tile_texture_manager.h"
-#include <QOpenGLTexture>
 #include <QOpenGLBuffer>
 #include <QMatrix4x4>
 
@@ -14,20 +13,20 @@ public:
 
     void initialize() override;
     void render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model) override;
+    void updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model);
 
 private:
     void initShaders();
     void initTextures();
     void initGeometry();
-    void createSphere(int rings, int segments);
+    void createSphere();
     GLint getMaxTextureSize();
 
     // Константы
-    static constexpr int RINGS = 180;
-    static constexpr int SEGMENTS = 360;
-    static constexpr float DEFAULT_DISPLACEMENT_SCALE = 0.15f;
+    static constexpr int RINGS = 64;
+    static constexpr int SEGMENTS = 64;
 
-    // Менеджеры тайлов для текстур
+    // Менеджеры текстур
     TileTextureManager* earthTextureTiles;
     TileTextureManager* heightMapTiles;
     TileTextureManager* normalMapTiles;
@@ -36,12 +35,16 @@ private:
     QOpenGLBuffer indexBuffer;
     float radius;
     int vertexCount;
-    float displacementScale;
 
-    // Текущее состояние
-    QVector2D currentViewCenter;
-    bool texturesInitialized;
-    int calculateOptimalTileSize(int width, int height);
+    struct Vertex {
+        QVector3D position;
+        QVector2D texCoord;
+        QVector3D normal;
+        QVector2D segmentIndex;  // (ring, segment)
+    };
+
+    QVector<Vertex> vertices;
+    QVector<GLuint> indices;
 };
 
 #endif // EARTH_RENDERER_H

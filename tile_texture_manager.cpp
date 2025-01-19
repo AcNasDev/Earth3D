@@ -1,104 +1,204 @@
-// tile_texture_manager.cpp
 #include "tile_texture_manager.h"
-#include <QDebug>
-#include <QImageReader>
+#include <QImage>
+#include <QtMath>
 
-TileTextureManager::TileTextureManager(const QString& path, int size, int sphereRings, int sphereSegments)
+TileTextureManager::TileTextureManager(const QString& path, int numRings, int numSegments)
     : imagePath(path)
-    , tileSize(size)
-    , textureArrayId(0)
-    , isInitialized(false)
-    , rings(sphereRings)
-    , segments(sphereSegments)
+    , rings(numRings)
+    , segments(numSegments)
 {
     initializeOpenGLFunctions();
 }
 
 TileTextureManager::~TileTextureManager()
 {
-    if (textureArrayId) {
-        glDeleteTextures(1, &textureArrayId);
+    // Удаляем все загруженные текстуры
+    for (const auto& tile : tiles) {
+        if (tile.isLoaded) {
+            glDeleteTextures(1, &tile.textureId);
+        }
     }
 }
 
 void TileTextureManager::initialize()
 {
-    if (isInitialized) return;
-
-    // Загружаем полное изображение
-    fullImage = QImage(imagePath);
-    if (fullImage.isNull()) {
+    sourceImage.load(imagePath);
+    if (sourceImage.isNull()) {
         qWarning() << "Failed to load image:" << imagePath;
         return;
     }
-
-    // Конвертируем в RGBA формат если нужно
-    if (fullImage.format() != QImage::Format_RGBA8888) {
-        fullImage = fullImage.convertToFormat(QImage::Format_RGBA8888);
-    }
-
-    // Создаем текстурный массив
-    glGenTextures(1, &textureArrayId);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-
-    // Создаем хранилище для всех сегментов
-    int totalLayers = rings * segments;
-    glTexImage3D(GL_TEXTURE_2D_ARRAY, 0, GL_RGBA8,
-                 tileSize, tileSize, totalLayers,
-                 0, GL_RGBA, GL_UNSIGNED_BYTE, nullptr);
-
-    // Настраиваем параметры текстуры
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-    glTexParameteri(GL_TEXTURE_2D_ARRAY, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-
-    isInitialized = true;
 }
 
-void TileTextureManager::loadAllTiles()
+void TileTextureManager::updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model)
 {
-    // QMutexLocker locker(&cacheMutex);
+    QSet<QPair<int, int>> newVisibleTiles;
 
+    // Проверяем каждый сегмент на видимость
     for (int ring = 0; ring < rings; ++ring) {
-        float v1 = static_cast<float>(ring) / rings;
-        float v2 = static_cast<float>(ring + 1) / rings;
+        for (int segment = 0; segment < segments; ++segment) {
+            QRectF bounds = calculateTileBounds(ring, segment);
+            if (isTileInViewFrustum(bounds, viewProjection * model)) {
+                newVisibleTiles.insert({ring, segment});
 
-        for (int seg = 0; seg < segments; ++seg) {
-            float u1 = 1.0f - static_cast<float>(seg + 1) / segments;
-            float u2 = 1.0f - static_cast<float>(seg) / segments;
-
-            // Вычисляем пиксельные координаты в исходном изображении
-            int startX = static_cast<int>(u1 * fullImage.width());
-            int endX = static_cast<int>(u2 * fullImage.width());
-            int startY = static_cast<int>(v1 * fullImage.height());
-            int endY = static_cast<int>(v2 * fullImage.height());
-
-            // Вырезаем и масштабируем изображение для текущего сегмента
-            QImage segmentImage = fullImage.copy(
-                                               startX, startY,
-                                               endX - startX,
-                                               endY - startY
-                                               ).scaled(
-                                          tileSize, tileSize,
-                                          Qt::IgnoreAspectRatio,
-                                          Qt::SmoothTransformation
-                                          );
-
-            // Загружаем в текстурный массив
-            int layer = ring * segments + seg;
-            glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
-            glTexSubImage3D(GL_TEXTURE_2D_ARRAY, 0,
-                            0, 0, layer,
-                            tileSize, tileSize, 1,
-                            GL_RGBA, GL_UNSIGNED_BYTE,
-                            segmentImage.constBits());
+                // Загружаем тайл, если он еще не загружен
+                if (!tiles.contains({ring, segment}) || !tiles[{ring, segment}].isLoaded) {
+                    loadTile(ring, segment);
+                }
+            }
         }
     }
+
+    // Выгружаем невидимые тайлы
+    for (auto it = tiles.begin(); it != tiles.end(); ++it) {
+        if (!newVisibleTiles.contains({it.key().first, it.key().second})) {
+            unloadTile(it.key().first, it.key().second);
+        }
+    }
+
+    visibleTiles = newVisibleTiles;
 }
 
-void TileTextureManager::bindAllTiles()
+void TileTextureManager::loadTile(int ring, int segment)
 {
-    // QMutexLocker locker(&cacheMutex);
-    glBindTexture(GL_TEXTURE_2D_ARRAY, textureArrayId);
+    // Проверяем, не превышен ли лимит загруженных тайлов
+    if (tiles.size() >= MAX_LOADED_TILES) {
+        // Находим и выгружаем самый старый невидимый тайл
+        for (auto it = tiles.begin(); it != tiles.end(); ++it) {
+            if (!visibleTiles.contains({it.key().first, it.key().second})) {
+                unloadTile(it.key().first, it.key().second);
+                break;
+            }
+        }
+    }
+
+    // Вычисляем границы тайла в исходном изображении
+    QRectF bounds = calculateTileBounds(ring, segment);
+    int x = bounds.x() * sourceImage.width();
+    int y = bounds.y() * sourceImage.height();
+    int width = bounds.width() * sourceImage.width();
+    int height = bounds.height() * sourceImage.height();
+
+    // Вырезаем и создаем текстуру для тайла
+    QImage tileImage = sourceImage.copy(x, y, width, height);
+
+    GLuint textureId;
+    glGenTextures(1, &textureId);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA,
+                 tileImage.width(), tileImage.height(), 0,
+                 GL_RGBA, GL_UNSIGNED_BYTE, tileImage.bits());
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+
+    // Сохраняем информацию о тайле
+    Tile tile;
+    tile.ring = ring;
+    tile.segment = segment;
+    tile.isLoaded = true;
+    tile.textureId = textureId;
+    tile.bounds = bounds;
+
+    tiles.insert({ring, segment}, tile);
+}
+
+void TileTextureManager::unloadTile(int ring, int segment)
+{
+    auto it = tiles.find({ring, segment});
+    if (it != tiles.end() && it.value().isLoaded) {
+        glDeleteTextures(1, &it.value().textureId);
+        tiles.remove({ring, segment});
+    }
+}
+
+QRectF TileTextureManager::calculateTileBounds(int ring, int segment) const
+{
+    float u1 = static_cast<float>(segment) / segments;
+    float u2 = static_cast<float>(segment + 1) / segments;
+    float v1 = static_cast<float>(ring) / rings;
+    float v2 = static_cast<float>(ring + 1) / rings;
+
+    return QRectF(u1, v1, u2 - u1, v2 - v1);
+}
+
+bool TileTextureManager::isTileVisible(int ring, int segment) const
+{
+    // Проверяем, есть ли тайл в списке видимых
+    return visibleTiles.contains({ring, segment});
+}
+
+bool TileTextureManager::isTileInViewFrustum(const QRectF& bounds, const QMatrix4x4& viewProjection) const
+{
+    // Создаем 8 угловых точек для сферического сегмента
+    QVector<QVector3D> corners;
+
+    // Конвертируем UV координаты в сферические координаты
+    float phi1 = bounds.top() * M_PI;        // Начальная широта
+    float phi2 = bounds.bottom() * M_PI;     // Конечная широта
+    float theta1 = bounds.left() * 2 * M_PI; // Начальная долгота
+    float theta2 = bounds.right() * 2 * M_PI;// Конечная долгота
+
+    // Генерируем 8 угловых точек сегмента сферы
+    for (float phi : {phi1, phi2}) {
+        for (float theta : {theta1, theta2}) {
+            // Внутренняя точка (на поверхности сферы)
+            float x = sin(phi) * cos(theta);
+            float y = cos(phi);
+            float z = sin(phi) * sin(theta);
+            corners.append(QVector3D(x, y, z));
+
+            // Внешняя точка (с учетом высоты рельефа)
+            const float heightScale = 0.1f; // Максимальная высота рельефа (10% от радиуса)
+            corners.append(QVector3D(x * (1.0f + heightScale),
+                                     y * (1.0f + heightScale),
+                                     z * (1.0f + heightScale)));
+        }
+    }
+
+    // Проверяем, находится ли хотя бы одна точка в видимой области
+    for (const auto& corner : corners) {
+        QVector4D clipSpace = viewProjection * QVector4D(corner, 1.0f);
+
+        // Проверка на w == 0 для предотвращения деления на ноль
+        if (qFuzzyIsNull(clipSpace.w())) {
+            continue;
+        }
+
+        // Нормализация в clip space
+        clipSpace /= clipSpace.w();
+
+        // Если хотя бы одна точка находится в видимом объеме ([-1,1] для всех координат),
+        // считаем тайл видимым
+        if (clipSpace.x() >= -1.0f && clipSpace.x() <= 1.0f &&
+            clipSpace.y() >= -1.0f && clipSpace.y() <= 1.0f &&
+            clipSpace.z() >= -1.0f && clipSpace.z() <= 1.0f) {
+            return true;
+        }
+    }
+
+    // Дополнительная проверка для случая, когда камера находится внутри сегмента
+    QVector3D cameraPos = viewProjection.inverted().column(3).toVector3D();
+    QVector3D segmentCenter = QVector3D(
+        sin((phi1 + phi2) * 0.5f) * cos((theta1 + theta2) * 0.5f),
+        cos((phi1 + phi2) * 0.5f),
+        sin((phi1 + phi2) * 0.5f) * sin((theta1 + theta2) * 0.5f)
+        );
+
+    float distanceToCamera = (cameraPos - segmentCenter).length();
+    if (distanceToCamera < 1.2f) { // Немного больше радиуса сферы для учета высоты рельефа
+        return true;
+    }
+
+    return false;
+}
+
+void TileTextureManager::bindTileForSegment(int ring, int segment)
+{
+    auto it = tiles.find({ring, segment});
+    if (it != tiles.end() && it.value().isLoaded) {
+        glBindTexture(GL_TEXTURE_2D, it.value().textureId);
+    }
 }

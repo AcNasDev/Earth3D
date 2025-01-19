@@ -1,9 +1,8 @@
 #include "earth_renderer.h"
-#include <QImage>
+#include <QVector2D>
+#include <QVector3D>
 #include <QtMath>
 #include <QCoreApplication>
-#include <QImageReader>
-#include <QDebug>
 
 EarthRenderer::EarthRenderer(float radius)
     : Renderer()
@@ -13,8 +12,6 @@ EarthRenderer::EarthRenderer(float radius)
     , indexBuffer(QOpenGLBuffer::IndexBuffer)
     , radius(radius)
     , vertexCount(0)
-    , displacementScale(DEFAULT_DISPLACEMENT_SCALE)
-    , texturesInitialized(false)
 {
 }
 
@@ -31,149 +28,71 @@ EarthRenderer::~EarthRenderer()
 
 void EarthRenderer::initialize()
 {
-    return;
     if (!init()) {
         qDebug() << "Failed to initialize OpenGL functions for EarthRenderer";
         return;
     }
 
-    // Проверяем максимальный поддерживаемый размер текстур
-    GLint maxTextureSize = getMaxTextureSize();
-    qDebug() << "Maximum supported texture size:" << maxTextureSize;
-
     initShaders();
     initTextures();
     initGeometry();
-
-    earthTextureTiles->loadAllTiles();
-    heightMapTiles->loadAllTiles();
-    normalMapTiles->loadAllTiles();
-}
-
-void EarthRenderer::initShaders()
-{
-    return;
-    if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/earth_vertex.glsl")) {
-        qDebug() << "Failed to compile earth vertex shader";
-    }
-
-    if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/earth_fragment.glsl")) {
-        qDebug() << "Failed to compile earth fragment shader";
-    }
-
-    if (!program.link()) {
-        qDebug() << "Failed to link earth shader program";
-    }
-}
-
-int EarthRenderer::calculateOptimalTileSize(int width, int height)
-{
-    // Получаем максимальный поддерживаемый размер текстуры
-    GLint maxTextureSize = getMaxTextureSize();
-
-    // Начинаем с размера 2048
-    int tileSize = 2048;
-
-    // Проверяем, сколько тайлов получится
-    int tilesX = (width + tileSize - 1) / tileSize;
-    int tilesY = (height + tileSize - 1) / tileSize;
-
-    // Если количество тайлов превышает 8x8 (64 тайла), увеличиваем размер тайла
-    while (tilesX * tilesY > 64 && tileSize < maxTextureSize) {
-        tileSize *= 2;
-        tilesX = (width + tileSize - 1) / tileSize;
-        tilesY = (height + tileSize - 1) / tileSize;
-    }
-
-    return tileSize;
 }
 
 void EarthRenderer::initTextures()
 {
-    return;
     QString buildDir = QCoreApplication::applicationDirPath();
 
-    // Загружаем изображения для определения их размеров
-    QImage earthTexture(buildDir + "/textures/earth.jpg");
-    QImage heightMap(buildDir + "/textures/earth_height.png");
-    QImage normalMap(buildDir + "/textures/earth_normal.png");
+    earthTextureTiles = new TileTextureManager(buildDir + "/textures/earth.jpg", RINGS, SEGMENTS);
+    heightMapTiles = new TileTextureManager(buildDir + "/textures/earth_height.png", RINGS, SEGMENTS);
+    normalMapTiles = new TileTextureManager(buildDir + "/textures/earth_normal.png", RINGS, SEGMENTS);
 
-    // Находим максимальные размеры
-    int maxWidth = qMax(qMax(earthTexture.width(), heightMap.width()), normalMap.width());
-    int maxHeight = qMax(qMax(earthTexture.height(), heightMap.height()), normalMap.height());
-
-    // Рассчитываем оптимальный размер тайла
-    int tileSize = calculateOptimalTileSize(maxWidth, maxHeight);
-
-    qDebug() << "Texture sizes:"
-             << "\nEarth texture:" << earthTexture.size()
-             << "\nHeight map:" << heightMap.size()
-             << "\nNormal map:" << normalMap.size()
-             << "\nOptimal tile size:" << tileSize;
-
-    // Создаем менеджеры тайлов с параметрами сферы
-    earthTextureTiles = new TileTextureManager(buildDir + "/textures/earth.jpg", tileSize, RINGS, SEGMENTS);
-    heightMapTiles = new TileTextureManager(buildDir + "/textures/earth_height.png", tileSize, RINGS, SEGMENTS);
-    normalMapTiles = new TileTextureManager(buildDir + "/textures/earth_normal.png", tileSize, RINGS, SEGMENTS);
-
-    // Инициализируем менеджеры
     earthTextureTiles->initialize();
     heightMapTiles->initialize();
     normalMapTiles->initialize();
-
-    texturesInitialized = true;
 }
 
-void EarthRenderer::initGeometry()
+void EarthRenderer::createSphere()
 {
-    return;
-    vao.create();
-    vao.bind();
+    vertices.clear();
+    indices.clear();
 
-    vbo.create();
-    indexBuffer.create();
+    for (int ring = 0; ring <= RINGS; ++ring) {
+        float phi = ring * M_PI / RINGS;
+        float v = static_cast<float>(ring) / RINGS;
 
-    createSphere(RINGS, SEGMENTS);
-
-    vao.release();
-}
-
-void EarthRenderer::createSphere(int rings, int segments)
-{
-    QVector<GLfloat> vertices;
-    QVector<GLuint> indices;
-
-    // Генерация вершин сферы
-    for (int ring = 0; ring <= rings; ++ring) {
-        float phi = ring * M_PI / rings;
-        float v = static_cast<float>(ring) / rings; // Текстурная координата V
-
-        for (int segment = 0; segment <= segments; ++segment) {
-            float theta = segment * 2.0f * M_PI / segments;
-            float u = 1.0f - static_cast<float>(segment) / segments; // Текстурная координата U
+        for (int segment = 0; segment <= SEGMENTS; ++segment) {
+            float theta = segment * 2.0f * M_PI / SEGMENTS;
+            float u = 1.0f - static_cast<float>(segment) / SEGMENTS;
 
             // Позиция
-            float x = sin(phi) * cos(theta) * radius;
-            float y = cos(phi) * radius;
-            float z = sin(phi) * sin(theta) * radius;
+            QVector3D pos(
+                sin(phi) * cos(theta) * radius,
+                cos(phi) * radius,
+                sin(phi) * sin(theta) * radius
+                );
 
             // Нормаль
-            float nx = sin(phi) * cos(theta);
-            float ny = cos(phi);
-            float nz = sin(phi) * sin(theta);
+            QVector3D normal(
+                sin(phi) * cos(theta),
+                cos(phi),
+                sin(phi) * sin(theta)
+                );
 
-            // Добавляем вершину
-            vertices << x << y << z;      // позиция
-            vertices << u << v;           // текстурные координаты
-            vertices << nx << ny << nz;   // нормаль
+            Vertex vertex;
+            vertex.position = pos;
+            vertex.texCoord = QVector2D(u, v);
+            vertex.normal = normal;
+            vertex.segmentIndex = QVector2D(ring, segment);
+
+            vertices.append(vertex);
         }
     }
 
     // Генерация индексов
-    for (int ring = 0; ring < rings; ++ring) {
-        for (int segment = 0; segment < segments; ++segment) {
-            GLuint current = ring * (segments + 1) + segment;
-            GLuint next = current + segments + 1;
+    for (int ring = 0; ring < RINGS; ++ring) {
+        for (int segment = 0; segment < SEGMENTS; ++segment) {
+            GLuint current = ring * (SEGMENTS + 1) + segment;
+            GLuint next = current + SEGMENTS + 1;
 
             indices << current << current + 1 << next;
             indices << next << current + 1 << next + 1;
@@ -182,46 +101,42 @@ void EarthRenderer::createSphere(int rings, int segments)
 
     vertexCount = indices.size();
 
-    // Создаем VBO и заполняем данными
+    // Загружаем данные в буферы
     vbo.create();
     vbo.bind();
-    vbo.allocate(vertices.constData(), vertices.size() * sizeof(GLfloat));
+    vbo.allocate(vertices.constData(), vertices.size() * sizeof(Vertex));
 
-    // Создаем IBO и заполняем индексами
     indexBuffer.create();
     indexBuffer.bind();
     indexBuffer.allocate(indices.constData(), indices.size() * sizeof(GLuint));
 
     // Настраиваем атрибуты вершин
-    // Позиция (3 float)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), nullptr);
+    program.enableAttributeArray(0);  // position
+    program.setAttributeBuffer(0, GL_FLOAT, offsetof(Vertex, position), 3, sizeof(Vertex));
 
-    // Текстурные координаты (2 float)
-    glEnableVertexAttribArray(1);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(3 * sizeof(GLfloat)));
+    program.enableAttributeArray(1);  // texCoord
+    program.setAttributeBuffer(1, GL_FLOAT, offsetof(Vertex, texCoord), 2, sizeof(Vertex));
 
-    // Нормаль (3 float)
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(5 * sizeof(GLfloat)));
+    program.enableAttributeArray(2);  // normal
+    program.setAttributeBuffer(2, GL_FLOAT, offsetof(Vertex, normal), 3, sizeof(Vertex));
 
-    vbo.release();
-    indexBuffer.release();
+    program.enableAttributeArray(3);  // segmentIndex
+    program.setAttributeBuffer(3, GL_FLOAT, offsetof(Vertex, segmentIndex), 2, sizeof(Vertex));
 }
 
-GLint EarthRenderer::getMaxTextureSize()
+void EarthRenderer::updateVisibleTiles(const QMatrix4x4& viewProjection, const QMatrix4x4& model)
 {
-    GLint maxSize;
-    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
-    return maxSize;
+    earthTextureTiles->updateVisibleTiles(viewProjection, model);
+    heightMapTiles->updateVisibleTiles(viewProjection, model);
+    normalMapTiles->updateVisibleTiles(viewProjection, model);
 }
 
 void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
 {
-    return;
-    if (!texturesInitialized) return;
+    if (!program.isLinked()) return;
+
+    QMatrix4x4 viewProjection = projection * view;
+    updateVisibleTiles(viewProjection, model);
 
     program.bind();
     vao.bind();
@@ -231,30 +146,41 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
-    qDebug() << "!!!!!!!!!!!!!!!";
-    // Привязываем текстуры
-    glActiveTexture(GL_TEXTURE0);
-    earthTextureTiles->bindAllTiles();
-    program.setUniformValue("earthTexture", 0);
+    program.setUniformValue("viewProjection", viewProjection);
 
-    glActiveTexture(GL_TEXTURE1);
-    heightMapTiles->bindAllTiles();
-    program.setUniformValue("heightMap", 1);
-
-    glActiveTexture(GL_TEXTURE2);
-    normalMapTiles->bindAllTiles();
-    program.setUniformValue("normalMap", 2);
-
-    // Настройка отсечения граней
+    // Настройка состояния OpenGL
     glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LESS);
-
     glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);    // Отсекаем задние грани
-    glFrontFace(GL_CCW);    // Передние грани определяются против часовой стрелки
+    glCullFace(GL_BACK);
 
-    // Отрисовка
-    glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
+    // Для каждого видимого сегмента привязываем соответствующие текстуры
+    for (int ring = 0; ring < RINGS; ++ring) {
+        for (int segment = 0; segment < SEGMENTS; ++segment) {
+            if (earthTextureTiles->isTileVisible(ring, segment)) {
+                // Устанавливаем текстуры для текущего сегмента
+                glActiveTexture(GL_TEXTURE0);
+                earthTextureTiles->bindTileForSegment(ring, segment);
+                program.setUniformValue("earthTexture", 0);
+
+                glActiveTexture(GL_TEXTURE1);
+                heightMapTiles->bindTileForSegment(ring, segment);
+                program.setUniformValue("heightMap", 1);
+
+                glActiveTexture(GL_TEXTURE2);
+                normalMapTiles->bindTileForSegment(ring, segment);
+                program.setUniformValue("normalMap", 2);
+
+                // Устанавливаем индексы текущего сегмента
+                program.setUniformValue("currentRing", ring);
+                program.setUniformValue("currentSegment", segment);
+
+                // Отрисовываем только индексы для текущего сегмента
+                int indexOffset = (ring * SEGMENTS + segment) * 6; // 6 индексов на сегмент
+                glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT,
+                               reinterpret_cast<void*>(indexOffset * sizeof(GLuint)));
+            }
+        }
+    }
 
     // Возвращаем состояние OpenGL
     glDisable(GL_CULL_FACE);
@@ -262,4 +188,37 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
 
     vao.release();
     program.release();
+}
+
+void EarthRenderer::initShaders()
+{
+    if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/earth_vertex.glsl")) {
+        qDebug() << "Failed to compile vertex shader";
+        return;
+    }
+
+    if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/earth_fragment.glsl")) {
+        qDebug() << "Failed to compile fragment shader";
+        return;
+    }
+
+    if (!program.link()) {
+        qDebug() << "Failed to link shader program";
+        return;
+    }
+}
+
+void EarthRenderer::initGeometry()
+{
+    vao.create();
+    vao.bind();
+    createSphere();
+    vao.release();
+}
+
+GLint EarthRenderer::getMaxTextureSize()
+{
+    GLint maxSize;
+    glGetIntegerv(GL_MAX_TEXTURE_SIZE, &maxSize);
+    return maxSize;
 }
