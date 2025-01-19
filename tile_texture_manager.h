@@ -28,6 +28,9 @@ public:
     int getTilesX() const { return tilesX; }
     int getTilesY() const { return tilesY; }
     QVector4D getCurrentTileInfo(const QVector2D& texCoord);
+    void bindAllTiles();
+    void loadAllTiles();
+    QVector<QVector4D> getAllTilesInfo() const;
 
 private:
     QString imagePath;
@@ -38,6 +41,7 @@ private:
     QCache<QPoint, QOpenGLTexture> tileCache;
     QMutex cacheMutex;
     QImage sourceImage;
+    QVector<QVector4D> tilesInfo; // Информация для всех тайлов
 
     void loadTile(int x, int y);
     QPoint texCoordToTile(const QVector2D& texCoord);

@@ -43,6 +43,10 @@ void EarthRenderer::initialize()
     initShaders();
     initTextures();
     initGeometry();
+
+    earthTextureTiles->loadAllTiles();
+    heightMapTiles->loadAllTiles();
+    normalMapTiles->loadAllTiles();
 }
 
 void EarthRenderer::initShaders()
@@ -196,32 +200,31 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("normalMatrix", model.normalMatrix());
     program.setUniformValue("displacementScale", displacementScale);
 
-    // Цветовая текстура Земли
+    // Передаем информацию о количестве тайлов
+    program.setUniformValue("tilesX", earthTextureTiles->getTilesX());
+    program.setUniformValue("tilesY", earthTextureTiles->getTilesY());
+
+    // Передаем информацию о всех тайлах
+    qDebug() << "Start";
+    QVector<QVector4D> earthTilesInfo = earthTextureTiles->getAllTilesInfo();
+    for (int i = 0; i < earthTilesInfo.size(); ++i) {
+        QString uniformName = QString("tilesInfo[%1]").arg(i);
+        program.setUniformValue(uniformName.toStdString().c_str(), earthTilesInfo[i]);
+    }
+    qDebug() << "End";
+    // Привязываем текстуры
     glActiveTexture(GL_TEXTURE0);
-    earthTextureTiles->bindTileForCoordinate(currentViewCenter);
+    earthTextureTiles->bindAllTiles();
     program.setUniformValue("earthTexture", 0);
-    auto earthInfo = earthTextureTiles->getCurrentTileInfo(currentViewCenter);
-    program.setUniformValue("earthTextureInfo", earthInfo);
 
-    // Карта высот
     glActiveTexture(GL_TEXTURE1);
-    heightMapTiles->bindTileForCoordinate(currentViewCenter);
+    heightMapTiles->bindAllTiles();
     program.setUniformValue("heightMap", 1);
-    auto heightInfo = heightMapTiles->getCurrentTileInfo(currentViewCenter);
-    program.setUniformValue("heightMapInfo", heightInfo);
 
-    // Карта нормалей
     glActiveTexture(GL_TEXTURE2);
-    normalMapTiles->bindTileForCoordinate(currentViewCenter);
+    normalMapTiles->bindAllTiles();
     program.setUniformValue("normalMap", 2);
-    auto normalInfo = normalMapTiles->getCurrentTileInfo(currentViewCenter);
-    program.setUniformValue("normalMapInfo", normalInfo);
-
-    qDebug() << "Rendering with view center:" << currentViewCenter
-             << "\nEarth texture info:" << earthInfo
-             << "\nHeight map info:" << heightInfo
-             << "\nNormal map info:" << normalInfo;
-
+    qDebug() << "End1";
     // Отрисовка
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
 
