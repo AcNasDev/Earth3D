@@ -3,38 +3,59 @@ layout(location = 0) in vec3 position;
 layout(location = 1) in vec2 texCoord;
 layout(location = 2) in vec3 normal;
 
+// Структура для информации о текстуре
+struct TextureInfo {
+    int tilesX;
+    int tilesY;
+    vec4 tilesInfo[64]; // Максимальное количество тайлов для одной текстуры
+};
+
 uniform mat4 mvp;
 uniform mat4 model;
 uniform mat3 normalMatrix;
-uniform vec4 tilesInfo[100];  // Массив информации о тайлах
-uniform int tilesX;           // Количество тайлов по X
-uniform int tilesY;           // Количество тайлов по Y
-uniform float displacementScale;
 
-out vec2 TexCoord;
+// Отдельная информация для каждой текстуры
+uniform TextureInfo earthTextureInfo;
+uniform TextureInfo heightMapInfo;
+uniform TextureInfo normalMapInfo;
+
+out vec2 EarthTexCoord;
 out vec2 HeightMapCoord;
 out vec2 NormalMapCoord;
 out vec3 WorldPos;
 out vec3 WorldNormal;
-flat out int TileIndex;
 
-void main()
-{
-    // Определяем, к какому тайлу относятся текстурные координаты
-    int tileX = int(texCoord.x * tilesX);
-    int tileY = int(texCoord.y * tilesY);
-    TileIndex = tileY * tilesX + tileX;
+// Функция для преобразования текстурных координат с учетом тайлов
+vec2 calculateTextureCoordinates(vec2 texCoord, TextureInfo info) {
+    // Определяем, в каком тайле мы находимся
+    int tileX = int(texCoord.x * info.tilesX);
+    int tileY = int(texCoord.y * info.tilesY);
 
-    // Преобразуем текстурные координаты для конкретного тайла
-    vec4 tileInfo = tilesInfo[TileIndex];
-    vec2 localTexCoord = fract(vec2(texCoord.x * tilesX, texCoord.y * tilesY));
-    TexCoord = localTexCoord * tileInfo.zw + tileInfo.xy;
+    // Убеждаемся, что индексы в допустимых пределах
+    tileX = clamp(tileX, 0, info.tilesX - 1);
+    tileY = clamp(tileY, 0, info.tilesY - 1);
 
-    // То же самое для карт высот и нормалей
-    HeightMapCoord = localTexCoord * tileInfo.zw + tileInfo.xy;
-    NormalMapCoord = localTexCoord * tileInfo.zw + tileInfo.xy;
+    // Получаем информацию о тайле
+    int tileIndex = tileY * info.tilesX + tileX;
+    vec4 tileInfo = info.tilesInfo[tileIndex];
+
+    // Локальные координаты внутри тайла
+    vec2 localTexCoord = vec2(
+        fract(texCoord.x * info.tilesX),
+        fract(texCoord.y * info.tilesY)
+    );
+
+    // Возвращаем финальные текстурные координаты
+    return localTexCoord * tileInfo.zw + tileInfo.xy;
+}
+
+void main() {
+    // Вычисляем текстурные координаты для каждой текстуры
+    EarthTexCoord = calculateTextureCoordinates(texCoord, earthTextureInfo);
+    HeightMapCoord = calculateTextureCoordinates(texCoord, heightMapInfo);
+    NormalMapCoord = calculateTextureCoordinates(texCoord, normalMapInfo);
 
     WorldPos = vec3(model * vec4(position, 1.0));
-    WorldNormal = normalize(normalMatrix * normal);
+    WorldNormal = normalMatrix * normal;
     gl_Position = mvp * vec4(position, 1.0);
 }

@@ -42,6 +42,7 @@ private:
     QVector2D currentViewCenter;
     bool texturesInitialized;
     QVector2D calculateTextureCoordinate(const QVector3D &cameraPos);
+    int calculateOptimalTileSize(int width, int height);
 };
 
 #endif // EARTH_RENDERER_H

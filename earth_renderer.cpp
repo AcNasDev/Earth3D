@@ -64,12 +64,51 @@ void EarthRenderer::initShaders()
     }
 }
 
+int EarthRenderer::calculateOptimalTileSize(int width, int height)
+{
+    // Получаем максимальный поддерживаемый размер текстуры
+    GLint maxTextureSize = getMaxTextureSize();
+
+    // Начинаем с размера 2048
+    int tileSize = 2048;
+
+    // Проверяем, сколько тайлов получится
+    int tilesX = (width + tileSize - 1) / tileSize;
+    int tilesY = (height + tileSize - 1) / tileSize;
+
+    // Если количество тайлов превышает 8x8 (64 тайла), увеличиваем размер тайла
+    while (tilesX * tilesY > 64 && tileSize < maxTextureSize) {
+        tileSize *= 2;
+        tilesX = (width + tileSize - 1) / tileSize;
+        tilesY = (height + tileSize - 1) / tileSize;
+    }
+
+    return tileSize;
+}
+
 void EarthRenderer::initTextures()
 {
     QString buildDir = QCoreApplication::applicationDirPath();
-    int tileSize = 2048; // Оптимальный размер тайла
 
-    // Создаем менеджеры тайлов
+    // Загружаем изображения для определения их размеров
+    QImage earthTexture(buildDir + "/textures/earth.jpg");
+    QImage heightMap(buildDir + "/textures/earth_height.png");
+    QImage normalMap(buildDir + "/textures/earth_normal.png");
+
+    // Находим максимальные размеры
+    int maxWidth = qMax(qMax(earthTexture.width(), heightMap.width()), normalMap.width());
+    int maxHeight = qMax(qMax(earthTexture.height(), heightMap.height()), normalMap.height());
+
+    // Рассчитываем оптимальный размер тайла
+    int tileSize = calculateOptimalTileSize(maxWidth, maxHeight);
+
+    qDebug() << "Texture sizes:"
+             << "\nEarth texture:" << earthTexture.size()
+             << "\nHeight map:" << heightMap.size()
+             << "\nNormal map:" << normalMap.size()
+             << "\nOptimal tile size:" << tileSize;
+
+    // Создаем менеджеры тайлов с одинаковым размером тайла
     earthTextureTiles = new TileTextureManager(buildDir + "/textures/earth.jpg", tileSize);
     heightMapTiles = new TileTextureManager(buildDir + "/textures/earth_height.png", tileSize);
     normalMapTiles = new TileTextureManager(buildDir + "/textures/earth_normal.png", tileSize);
@@ -78,6 +117,16 @@ void EarthRenderer::initTextures()
     earthTextureTiles->initialize();
     heightMapTiles->initialize();
     normalMapTiles->initialize();
+
+    // Проверяем количество тайлов
+    int earthTilesCount = earthTextureTiles->getTilesX() * earthTextureTiles->getTilesY();
+    int heightTilesCount = heightMapTiles->getTilesX() * heightMapTiles->getTilesY();
+    int normalTilesCount = normalMapTiles->getTilesX() * normalMapTiles->getTilesY();
+
+    qDebug() << "Tiles count:"
+             << "\nEarth texture:" << earthTilesCount
+             << "\nHeight map:" << heightTilesCount
+             << "\nNormal map:" << normalTilesCount;
 
     texturesInitialized = true;
 }
@@ -100,6 +149,7 @@ void EarthRenderer::createSphere(int rings, int segments)
     QVector<GLfloat> vertices;
     QVector<GLuint> indices;
 
+    // Генерация вершин сферы
     for (int ring = 0; ring <= rings; ++ring) {
         float phi = ring * M_PI / rings;
         for (int segment = 0; segment <= segments; ++segment) {
@@ -111,11 +161,11 @@ void EarthRenderer::createSphere(int rings, int segments)
             float z = sin(phi) * sin(theta) * radius;
 
             // Текстурные координаты
-            // Важно: меняем способ вычисления текстурных координат
-            float u = segment / static_cast<float>(segments);
-            float v = ring / static_cast<float>(rings);
+            // Меняем направление текстурных координат для правильного отображения
+            float u = 1.0f - static_cast<float>(segment) / segments;
+            float v = static_cast<float>(ring) / rings;
 
-            // Нормаль
+            // Нормаль (направлена наружу от центра сферы)
             float nx = sin(phi) * cos(theta);
             float ny = cos(phi);
             float nz = sin(phi) * sin(theta);
@@ -127,18 +177,17 @@ void EarthRenderer::createSphere(int rings, int segments)
         }
     }
 
-    // Генерация индексов
+    // Генерация индексов - меняем порядок вершин для правильной ориентации треугольников
     for (int ring = 0; ring < rings; ++ring) {
         for (int segment = 0; segment < segments; ++segment) {
-            GLuint first = ring * (segments + 1) + segment;
-            GLuint second = first + segments + 1;
+            int current = ring * (segments + 1) + segment;
+            int next = current + segments + 1;
 
-            indices << first << first + 1 << second;
-            indices << second << first + 1 << second + 1;
+            // Меняем порядок вершин для правильной ориентации треугольников
+            indices << current << current + 1 << next;
+            indices << next << current + 1 << next + 1;
         }
     }
-
-    vertexCount = indices.size();
 
     // Загружаем данные в буферы
     vbo.bind();
@@ -148,16 +197,21 @@ void EarthRenderer::createSphere(int rings, int segments)
     indexBuffer.allocate(indices.constData(), indices.size() * sizeof(GLuint));
 
     // Настраиваем атрибуты вершин
-    glEnableVertexAttribArray(0); // position
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat), nullptr);
+    program.enableAttributeArray(0);
+    program.setAttributeBuffer(0, GL_FLOAT, 0, 3, 8 * sizeof(GLfloat));
 
-    glEnableVertexAttribArray(1); // texcoord
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(3 * sizeof(GLfloat)));
+    program.enableAttributeArray(1);
+    program.setAttributeBuffer(1, GL_FLOAT, 3 * sizeof(GLfloat), 2, 8 * sizeof(GLfloat));
 
-    glEnableVertexAttribArray(2); // normal
-    glVertexAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(GLfloat),
-                          reinterpret_cast<void*>(5 * sizeof(GLfloat)));
+    program.enableAttributeArray(2);
+    program.setAttributeBuffer(2, GL_FLOAT, 5 * sizeof(GLfloat), 3, 8 * sizeof(GLfloat));
+
+    vertexCount = indices.size();
+
+    // Включаем отсечение задних граней
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+    glFrontFace(GL_CCW); // против часовой стрелки
 }
 
 GLint EarthRenderer::getMaxTextureSize()
@@ -198,20 +252,42 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     program.setUniformValue("mvp", mvp);
     program.setUniformValue("model", model);
     program.setUniformValue("normalMatrix", model.normalMatrix());
-    program.setUniformValue("displacementScale", displacementScale);
 
-    // Передаем информацию о количестве тайлов
-    program.setUniformValue("tilesX", earthTextureTiles->getTilesX());
-    program.setUniformValue("tilesY", earthTextureTiles->getTilesY());
+    // Получаем информацию о текстурах
+    auto earthInfo = earthTextureTiles->getTextureInfo();
+    auto heightInfo = heightMapTiles->getTextureInfo();
+    auto normalInfo = normalMapTiles->getTextureInfo();
 
-    // Передаем информацию о всех тайлах
-    qDebug() << "Start";
-    QVector<QVector4D> earthTilesInfo = earthTextureTiles->getAllTilesInfo();
-    for (int i = 0; i < earthTilesInfo.size(); ++i) {
-        QString uniformName = QString("tilesInfo[%1]").arg(i);
-        program.setUniformValue(uniformName.toStdString().c_str(), earthTilesInfo[i]);
+    // Устанавливаем uniform-переменные для каждой текстуры
+    program.setUniformValue("earthTextureInfo.tilesX", earthInfo.tilesX);
+    program.setUniformValue("earthTextureInfo.tilesY", earthInfo.tilesY);
+    program.setUniformValue("heightMapInfo.tilesX", heightInfo.tilesX);
+    program.setUniformValue("heightMapInfo.tilesY", heightInfo.tilesY);
+    program.setUniformValue("normalMapInfo.tilesX", normalInfo.tilesX);
+    program.setUniformValue("normalMapInfo.tilesY", normalInfo.tilesY);
+
+    // Передаем информацию о тайлах для каждой текстуры
+    for (int i = 0; i < earthInfo.tilesInfo.size(); ++i) {
+        program.setUniformValue(
+            QString("earthTextureInfo.tilesInfo[%1]").arg(i).toStdString().c_str(),
+            earthInfo.tilesInfo[i]
+            );
     }
-    qDebug() << "End";
+
+    for (int i = 0; i < heightInfo.tilesInfo.size(); ++i) {
+        program.setUniformValue(
+            QString("heightMapInfo.tilesInfo[%1]").arg(i).toStdString().c_str(),
+            heightInfo.tilesInfo[i]
+            );
+    }
+
+    for (int i = 0; i < normalInfo.tilesInfo.size(); ++i) {
+        program.setUniformValue(
+            QString("normalMapInfo.tilesInfo[%1]").arg(i).toStdString().c_str(),
+            normalInfo.tilesInfo[i]
+            );
+    }
+
     // Привязываем текстуры
     glActiveTexture(GL_TEXTURE0);
     earthTextureTiles->bindAllTiles();
@@ -224,7 +300,7 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     glActiveTexture(GL_TEXTURE2);
     normalMapTiles->bindAllTiles();
     program.setUniformValue("normalMap", 2);
-    qDebug() << "End1";
+
     // Отрисовка
     glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);
 

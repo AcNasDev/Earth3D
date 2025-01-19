@@ -17,9 +17,22 @@ public:
 
         Tile() : texture(nullptr), isLoaded(false) {}
     };
+    struct TextureInfo {
+        int tilesX;
+        int tilesY;
+        QVector<QVector4D> tilesInfo;
+    };
 
     TileTextureManager(const QString& imagePath, int tileSize = 2048);
     ~TileTextureManager();
+
+    TextureInfo getTextureInfo() const {
+        return TextureInfo {
+            tilesX,
+            tilesY,
+            tilesInfo
+        };
+    }
 
     void initialize();
     void bindTileForCoordinate(const QVector2D& texCoord);
