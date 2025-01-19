@@ -12,6 +12,13 @@ out vec4 FragColor;
 
 void main()
 {
+    vec3 viewDir = normalize(viewPos - WorldPos);
+    float visibility = dot(normalize(WorldNormal), viewDir);
+
+    // Отсекаем фрагменты с обратной стороны, где есть высота
+    if(visibility < 0.0 && texture(heightMap, TexCoord).r > 0.01) {
+        discard;
+    }
     // Базовый цвет текстуры
     vec4 baseColor = texture(earthTexture, TexCoord);
     float height = texture(heightMap, TexCoord).r;

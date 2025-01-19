@@ -69,6 +69,7 @@ void EarthWidget::initializeGL()
     }
 
     // Теперь можно инициализировать рендереры
+    glCullFace(GL_BACK);
     earthRenderer->initialize();
     satelliteRenderer->initialize();
     trajectoryRenderer->initialize();
@@ -79,6 +80,7 @@ void EarthWidget::initializeGL()
     glEnable(GL_MULTISAMPLE);
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glDepthFunc(GL_LEQUAL); // Добавить эту строку
 }
 
 void EarthWidget::resizeGL(int w, int h)
