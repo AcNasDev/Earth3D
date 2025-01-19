@@ -79,12 +79,18 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
 
     vao.bind();
 
+    // Установка матриц
     program.setUniformValue("projectionMatrix", projection);
     program.setUniformValue("viewMatrix", view);
     program.setUniformValue("modelMatrix", model);
+
+    // Установка параметров освещения
     QVector3D cameraPos = view.inverted().column(3).toVector3D();
-    program.setUniformValue("lightPos", cameraPos);
-    program.setUniformValue("heightScale", 1.035f);
+    program.setUniformValue("viewPos", cameraPos);
+    program.setUniformValue("lightPos", cameraPos); // или другая позиция источника света
+
+    // Важно! Установка масштаба высоты
+    program.setUniformValue("heightScale", 0.15f);
 
     // Привязываем все текстуры один раз
     glActiveTexture(GL_TEXTURE0);

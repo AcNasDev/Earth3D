@@ -10,60 +10,58 @@ out vec4 fragColor;
 uniform sampler2D earthTexture;
 uniform sampler2D heightMap;
 uniform sampler2D normalMap;
-
-// Параметры освещения
 uniform vec3 lightPos;
 uniform vec3 viewPos;
-uniform float ambientStrength = 0.6;
+
+// Параметры освещения
+uniform float ambientStrength = 0.3;
+uniform float diffuseStrength = 0.7;
 uniform float specularStrength = 0.2;
-uniform float shininess = 8.0;
-uniform float atmosphereStrength = 0.15;
+uniform float shininess = 32.0;
+uniform float heightScale = 0.15;        // Должно совпадать со значением в vertex shader
 
 void main() {
-    // Получаем цвет из текстуры
+    // Базовый цвет из текстуры
     vec4 texColor = texture(earthTexture, vTexCoord);
+
+    // Получаем высоту для текущего фрагмента
     float height = texture(heightMap, vTexCoord).r;
-    vec3 normalMap = normalize(texture(normalMap, vTexCoord).rgb * 2.0 - 1.0);
 
-    // Усиливаем влияние карты нормалей для более выраженного рельефа
-    vec3 N = normalize(vNormal + normalMap * 0.8);
+    // Получаем нормаль из normal map
+    vec3 normalFromMap = normalize(texture(normalMap, vTexCoord).rgb * 2.0 - 1.0);
 
-    // Расчет освещения с учетом расстояния
+    // Комбинируем геометрическую нормаль с normal map
+    vec3 N = normalize(vNormal + normalFromMap * 0.5);
+
+    // Направление к источнику света
     vec3 lightDir = normalize(lightPos - vFragPos);
+
+    // Направление к камере
     vec3 viewDir = normalize(viewPos - vFragPos);
-    vec3 halfwayDir = normalize(lightDir + viewDir);
 
-    // Расчет затухания света
-    float distance = length(lightPos - vFragPos);
-    float attenuation = 1.0 / (1.0 + 0.000000001 * distance * distance);
+    // Ambient
+    vec3 ambient = ambientStrength * texColor.rgb;
 
-    // Ambient с учетом атмосферного рассеивания
-    float NdotV = max(dot(N, viewDir), 0.0);
-    float rimEffect = 1.0 - NdotV;
-    vec3 ambient = (ambientStrength + rimEffect * atmosphereStrength) * texColor.rgb;
-
-    // Diffuse с плавным переходом и усилением теней
+    // Diffuse с учётом рельефа
     float diff = max(dot(N, lightDir), 0.0);
-    diff = smoothstep(0.0, 1.0, diff);
-    vec3 diffuse = diff * texColor.rgb;
+    diff = diff * (1.0 + height * 0.5); // Усиливаем освещение на возвышенностях
+    vec3 diffuse = diff * diffuseStrength * texColor.rgb;
 
-    // Specular с использованием Blinn-Phong
+    // Specular с Blinn-Phong
+    vec3 halfwayDir = normalize(lightDir + viewDir);
     float spec = pow(max(dot(N, halfwayDir), 0.0), shininess);
     vec3 specular = specularStrength * spec * vec3(1.0);
 
-    // Применяем затухание к diffuse и specular составляющим
-    diffuse *= attenuation;
-    specular *= attenuation;
+    // Затенение в зависимости от высоты
+    float shadowFactor = 1.0 - (height * 0.5);
+    vec3 shadow = mix(vec3(1.0), vec3(shadowFactor), 0.3);
 
-    // Усиливаем эффект высоты для более выраженного рельефа
-    vec3 color = ambient + diffuse + specular;
-    color *= (1.0 + height * 0.15); // Увеличено влияние высоты
+    // Комбинируем все компоненты освещения
+    vec3 color = (ambient + diffuse) * shadow + specular;
 
-    // Добавляем эффект затенения в низинах
-    color *= (0.85 + height * 0.3);
+    // Добавляем эффект глубины в зависимости от высоты
+    color *= (1.0 + height * 0.3);
 
-    // Добавляем мягкое насыщение цвета
-    color = color / (color + vec3(1.0));
-
+    // Финальный цвет с сохранением прозрачности
     fragColor = vec4(color, texColor.a);
 }

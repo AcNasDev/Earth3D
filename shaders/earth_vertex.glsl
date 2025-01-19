@@ -14,23 +14,25 @@ uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
 uniform sampler2D heightMap;
-uniform float heightScale = 0.035; // Масштаб высоты рельефа
+uniform float heightScale = 0.15; // Значительно увеличен масштаб высоты
 
 void main() {
     vTexCoord = texCoord;
     vTileCoord = tileCoord;
 
-    // Получаем высоту из height map
+    // Получаем значение высоты из карты высот и усиливаем его
     float height = texture(heightMap, texCoord).r;
+    // Нелинейное усиление высоты для более заметного эффекта
+    height = pow(height, 0.8) * 1.2;
 
-    // Применяем смещение вдоль нормали
-    vec3 displacedPosition = position + normal * height * heightScale;
+    // Значительное смещение вершин вдоль нормали
+    vec3 displacedPosition = position + normal * height * heightScale * length(position);
 
-    // Обновляем нормаль с учетом рельефа
+    // Пересчитываем нормаль с учетом рельефа
     mat3 normalMatrix = transpose(inverse(mat3(modelMatrix)));
     vNormal = normalize(normalMatrix * normal);
 
-    // Вычисляем мировую позицию
+    // Вычисляем позицию в мировых координатах
     vec4 worldPos = modelMatrix * vec4(displacedPosition, 1.0);
     vFragPos = worldPos.xyz;
 
