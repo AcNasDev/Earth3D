@@ -33,8 +33,6 @@ private:
     // Буферы OpenGL
     QOpenGLBuffer indexBuffer;
     float radius;
-    int vertexCount;
-
     struct Vertex {
         QVector3D position;
         QVector2D texCoord;
@@ -42,8 +40,16 @@ private:
         QVector2D segmentIndex;  // (ring, segment)
     };
 
+
+    QOpenGLVertexArrayObject vao;
+    QOpenGLBuffer vbo{QOpenGLBuffer::VertexBuffer};
+    QOpenGLBuffer ibo{QOpenGLBuffer::IndexBuffer};
+    int vertexCount{0};
+
     QVector<Vertex> vertices;
     QVector<GLuint> indices;
+    QVector3D sphericalToCartesian(float radius, float phi, float theta);
+    void updateBuffers();
 };
 
 #endif // EARTH_RENDERER_H
