@@ -23,6 +23,7 @@ void TileTextureManager::initialize() {
         qWarning() << "Failed to load source image:" << imagePath;
         return;
     }
+    sourceImage = sourceImage.mirrored(true, false);
 
     // Если текстура слишком большая, разбиваем на более мелкие тайлы
     int maxTextureSize;
