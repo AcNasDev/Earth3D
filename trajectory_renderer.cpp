@@ -2,13 +2,20 @@
 #include "trajectory_renderer.h"
 
 TrajectoryRenderer::TrajectoryRenderer()
+    : currentVBO(QOpenGLBuffer::VertexBuffer),
+    predictedVBO(QOpenGLBuffer::VertexBuffer),
+    currentVertexCount(0),
+    predictedVertexCount(0),
+    needsUpdate(false)
 {
-    vbo.create();
 }
 
 TrajectoryRenderer::~TrajectoryRenderer()
 {
-    vbo.destroy();
+    if (currentVBO.isCreated())
+        currentVBO.destroy();
+    if (predictedVBO.isCreated())
+        predictedVBO.destroy();
 }
 
 void TrajectoryRenderer::initialize()
@@ -16,35 +23,49 @@ void TrajectoryRenderer::initialize()
     initializeOpenGLFunctions();
     initShaders();
 
+    // Создаем VAO и VBO
     vao.create();
     vao.bind();
-    vbo.bind();
 
-    // Настраиваем атрибут позиции
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(QVector3D), nullptr);
+    currentVBO.create();
+    predictedVBO.create();
 
     vao.release();
-    vbo.release();
 }
 
 void TrajectoryRenderer::initShaders()
 {
-    if (!program.addShaderFromSourceFile(QOpenGLShader::Vertex, ":/shaders/line_vertex.glsl"))
-        qDebug() << "Failed to compile vertex shader";
+    // Создаем и компилируем шейдеры
+    if (!program.addShaderFromSourceCode(QOpenGLShader::Vertex,
+                                         "# version 330 core\n"
+                                         "layout(location = 0) in vec3 aPos;\n"
+                                         "uniform mat4 mvp;\n"
+                                         "void main() {\n"
+                                         "    gl_Position = mvp * vec4(aPos, 1.0);\n"
+                                         "}\n"))
+        qDebug() << "Не удалось скомпилировать вертексный шейдер";
 
-    if (!program.addShaderFromSourceFile(QOpenGLShader::Fragment, ":/shaders/line_fragment.glsl"))
-        qDebug() << "Failed to compile fragment shader";
+    if (!program.addShaderFromSourceCode(QOpenGLShader::Fragment,
+                                         "#version 330 core\n"
+                                         "out vec4 FragColor;\n"
+                                         "uniform vec4 color;\n"
+                                         "void main() {\n"
+                                         "    FragColor = color;\n"
+                                         "}\n"))
+        qDebug() << "Не удалось скомпилировать фрагментный шейдер";
 
     if (!program.link())
-        qDebug() << "Failed to link shader program";
+        qDebug() << "Не удалось слинковать шейдерную программу";
 }
 
 void TrajectoryRenderer::setTrajectories(const QVector<QVector3D>& current,
                                          const QVector<QVector3D>& predicted)
 {
-    currentTrajectory = current;
-    predictedTrajectory = predicted;
+    if (current != currentTrajectory || predicted != predictedTrajectory) {
+        currentTrajectory = current;
+        predictedTrajectory = predicted;
+        needsUpdate = true;
+    }
 }
 
 void TrajectoryRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view, const QMatrix4x4& model)
@@ -61,31 +82,58 @@ void TrajectoryRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glEnable(GL_LINE_SMOOTH);
+    glLineWidth(2.0f);  // Делаем линии толще для лучшей видимости
 
     GLint previousDepthFunc;
     glGetIntegerv(GL_DEPTH_FUNC, &previousDepthFunc);
     glDepthFunc(GL_LEQUAL);
 
-    // Отрисовка текущей траектории (пунктирная белая линия)
-    if (!currentTrajectory.isEmpty()) {
-        QVector<QVector3D> dashedPoints;
-        createDashedLine(currentTrajectory, dashedPoints);
-        renderTrajectory(dashedPoints,
-                         QVector4D(1.0f, 1.0f, 1.0f, 1.0f),  // Белый цвет
-                         true,
-                         mvp);
+    // Обновляем буферы только если необходимо
+    if (needsUpdate) {
+        if (!currentTrajectory.isEmpty()) {
+            QVector<QVector3D> dashedPoints;
+            createDashedLine(currentTrajectory, dashedPoints);
+
+            currentVBO.bind();
+            currentVBO.allocate(dashedPoints.constData(), dashedPoints.size() * sizeof(QVector3D));
+            currentVertexCount = dashedPoints.size();
+        }
+
+        if (!predictedTrajectory.isEmpty()) {
+            predictedVBO.bind();
+            predictedVBO.allocate(predictedTrajectory.constData(),
+                                  predictedTrajectory.size() * sizeof(QVector3D));
+            predictedVertexCount = predictedTrajectory.size();
+        }
+
+        needsUpdate = false;
     }
 
-    // Отрисовка предсказанной траектории (сплошная голубая линия)
-    if (!predictedTrajectory.isEmpty()) {
-        renderTrajectory(predictedTrajectory,
-                         QVector4D(0.0f, 1.0f, 1.0f, 0.5f),  // Полупрозрачный голубой
-                         false,
-                         mvp);
+    program.setUniformValue("mvp", mvp);
+
+    // Отрисовка текущей траектории
+    if (currentVertexCount > 0) {
+        currentVBO.bind();
+        program.setUniformValue("color", QVector4D(1.0f, 1.0f, 1.0f, 1.0f));  // Белый цвет
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(0);
+        glDrawArrays(GL_LINES, 0, currentVertexCount);
+    }
+
+    // Отрисовка предсказанной траектории
+    if (predictedVertexCount > 0) {
+        predictedVBO.bind();
+        program.setUniformValue("color", QVector4D(0.0f, 1.0f, 1.0f, 0.5f));  // Полупрозрачный голубой
+        glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+        glEnableVertexAttribArray(0);
+        glDrawArrays(GL_LINE_STRIP, 0, predictedVertexCount);
     }
 
     // Восстановление состояния OpenGL
     glDepthFunc(previousDepthFunc);
+    glDisable(GL_LINE_SMOOTH);
+    glDisable(GL_BLEND);
+
     vao.release();
     program.release();
 }
@@ -94,6 +142,7 @@ void TrajectoryRenderer::createDashedLine(const QVector<QVector3D>& sourcePoints
                                           QVector<QVector3D>& dashedPoints)
 {
     dashedPoints.clear();
+    dashedPoints.reserve(sourcePoints.size() * 2);  // Примерная оценка необходимого размера
 
     for (int i = 0; i < sourcePoints.size() - 1; i++) {
         QVector3D start = sourcePoints[i];
@@ -121,21 +170,4 @@ void TrajectoryRenderer::createDashedLine(const QVector<QVector3D>& sourcePoints
             isDash = !isDash;
         }
     }
-}
-
-void TrajectoryRenderer::renderTrajectory(const QVector<QVector3D>& points,
-                                          const QVector4D& color,
-                                          bool isDashed,
-                                          const QMatrix4x4& mvp)
-{
-    vbo.bind();
-    vbo.allocate(points.constData(), points.size() * sizeof(QVector3D));
-
-    program.setUniformValue("mvp", mvp);
-    program.setUniformValue("color", color);
-
-    glLineWidth(isDashed ? 2.0f : 1.5f);
-    glDrawArrays(isDashed ? GL_LINES : GL_LINE_STRIP, 0, points.size());
-
-    vbo.release();
 }

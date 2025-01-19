@@ -180,13 +180,24 @@ void EarthWidget::updateSatellitePosition(int id, const QVector3D& newPosition,
                                           const QVector<QVector3D>& futureTrajectory,
                                           float angle)
 {
+    static QTimer updateTimer;
+    static bool timerActive = false;
+
     auto it = satellites.find(id);
     if (it != satellites.end()) {
         it->position = newPosition;
         it->angle = angle;
 
         if (id == selectedSatelliteId) {
-            trajectoryRenderer->setTrajectories(trajectory, futureTrajectory);
+            // Используем таймер для отложенного обновления траектории
+            if (!timerActive) {
+                timerActive = true;
+                updateTimer.singleShot(100, this, [this, trajectory, futureTrajectory]() {
+                    trajectoryRenderer->setTrajectories(trajectory, futureTrajectory);
+                    timerActive = false;
+                    update();
+                });
+            }
         }
 
         satelliteRenderer->updateSatellites(satellites);

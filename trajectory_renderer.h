@@ -1,4 +1,3 @@
-// trajectory_renderer.h
 #ifndef TRAJECTORY_RENDERER_H
 #define TRAJECTORY_RENDERER_H
 
@@ -25,7 +24,14 @@ private:
 
     QVector<QVector3D> currentTrajectory;
     QVector<QVector3D> predictedTrajectory;
-    QOpenGLBuffer vbo;
+
+    // Буферы для хранения данных
+    QOpenGLBuffer currentVBO;
+    QOpenGLBuffer predictedVBO;
+    int currentVertexCount;
+    int predictedVertexCount;
+    bool needsUpdate;
+
     const float dashLength = 0.1f;  // Длина штриха
     const float gapLength = 0.1f;   // Длина промежутка
 };
