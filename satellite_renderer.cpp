@@ -6,6 +6,7 @@ SatelliteRenderer::SatelliteRenderer()
     , indexBuffer(QOpenGLBuffer::IndexBuffer)
     , vertexCount(0)
 {
+    time = 0.0f;
 }
 
 SatelliteRenderer::~SatelliteRenderer()
@@ -133,6 +134,8 @@ void SatelliteRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& v
         program.setUniformValue("normalMatrix", satMatrix.normalMatrix());
         program.setUniformValue("viewPos", cameraPos);
         program.setUniformValue("isSelected", satellite.isSelected);
+        time += 0.016f; // Примерно 60 FPS
+        program.setUniformValue("time", time);
 
         // Рендерим спутник
         glDrawElements(GL_TRIANGLES, vertexCount, GL_UNSIGNED_INT, nullptr);

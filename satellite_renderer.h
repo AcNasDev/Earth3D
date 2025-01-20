@@ -23,6 +23,7 @@ private:
     QOpenGLBuffer indexBuffer;
     QMap<int, Satellite> satellites;
     int vertexCount;
+    float time; // Добавьте эту переменную
 
     static constexpr int RINGS = 16;     // Меньше детализация для спутников
     static constexpr int SEGMENTS = 16;   // Меньше детализация для спутников
