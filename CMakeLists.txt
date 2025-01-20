@@ -54,6 +54,7 @@ if(${QT_VERSION_MAJOR} GREATER_EQUAL 6)
         renderer.cpp
         satellite_info_renderer.h satellite_info_renderer.cpp
         tile_texture_manager.h tile_texture_manager.cpp
+        atmosphere_rendere.h atmosphere_rendere.cpp
 
 
     )

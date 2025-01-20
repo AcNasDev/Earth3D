@@ -10,5 +10,7 @@
         <file>shaders/axis_vertex.glsl</file>
         <file>shaders/trajectory.frag</file>
         <file>shaders/trajectory.vert</file>
+        <file>shaders/atmosphere_fragment.glsl</file>
+        <file>shaders/atmosphere_vertex.glsl</file>
     </qresource>
 </RCC>
