@@ -15,13 +15,15 @@ out float vHeight;
 out vec2 vTexCoord;
 
 void main() {
-    // Корректируем текстурные координаты
+    // Анимация текстурных координат
     vec2 adjustedTexCoord = texCoord;
-    adjustedTexCoord.x = fract(texCoord.x - time * 0.05); // Используем fract для плавного повторения
+    adjustedTexCoord.x = fract(texCoord.x - time * 0.02); // Замедляем скорость анимации
     adjustedTexCoord.y = texCoord.y;
     vTexCoord = adjustedTexCoord;
 
-    vec3 atmospherePos = position * 1.05;
+    // Позиция атмосферы выше поверхности Земли
+    vec3 atmospherePos = position * 1.02; // Небольшое увеличение для предотвращения z-fighting
+
     vFragPos = vec3(modelMatrix * vec4(atmospherePos, 1.0));
     vNormal = mat3(transpose(inverse(modelMatrix))) * normal;
     vHeight = length(atmospherePos) - length(position);

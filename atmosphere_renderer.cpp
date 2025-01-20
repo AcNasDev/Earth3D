@@ -4,7 +4,7 @@
 
 AtmosphereRenderer::AtmosphereRenderer(float earthRadius)
     : Renderer()
-    , radius(earthRadius)
+    , radius(earthRadius * 1.15f)
 {
 }
 
@@ -61,30 +61,23 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     skyTexture->bindTileTexture(0, 0);
     program.setUniformValue("skyTexture", 0);
 
-    // Сохраняем текущие состояния OpenGL
-    GLboolean depthTest, blend, cullFace;
-    glGetBooleanv(GL_DEPTH_TEST, &depthTest);
-    glGetBooleanv(GL_BLEND, &blend);
-    glGetBooleanv(GL_CULL_FACE, &cullFace);
-
-    // Настраиваем состояния для рендеринга атмосферы
-    glEnable(GL_DEPTH_TEST);
-    glDepthFunc(GL_LEQUAL);  // Изменяем функцию теста глубины
-
-    glEnable(GL_CULL_FACE);
-    glCullFace(GL_BACK);     // Отсекаем задние грани
-    glFrontFace(GL_CCW);     // Устанавливаем порядок вершин против часовой стрелки
-
+    // Настраиваем состояния OpenGL для правильного отображения неба
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_FALSE); // Отключаем запись в буфер глубины для прозрачности
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_FRONT); // Меняем на FRONT для отображения внутренней стороны сферы
 
     // Рисуем атмосферу
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
 
-    // Восстанавливаем предыдущие состояния OpenGL
-    if (!depthTest) glDisable(GL_DEPTH_TEST);
-    if (!blend) glDisable(GL_BLEND);
-    if (!cullFace) glDisable(GL_CULL_FACE);
+    // Восстанавливаем состояния
+    glDepthMask(GL_TRUE);
+    glDisable(GL_BLEND);
+    glCullFace(GL_BACK);
 
     vao.release();
     program.release();

@@ -16,37 +16,27 @@ void main() {
     vec3 viewDir = normalize(viewPos - vFragPos);
     vec3 normal = normalize(vNormal);
 
-    // Проверяем, смотрит ли фрагмент на камеру
-    float facingCamera = dot(viewDir, normal);
-    if (facingCamera < 0.0) {
-        discard; // Отбрасываем фрагменты, смотрящие от камеры
-    }
-
     // Получаем цвет облаков
     vec4 cloudColor = texture(skyTexture, vTexCoord);
     float cloudIntensity = cloudColor.r;
 
-    // Базовый цвет атмосферы
-    vec3 atmosphereColor = vec3(0.7, 0.85, 1.0);
+    // Базовый цвет атмосферы (более насыщенный голубой)
+    vec3 atmosphereColor = vec3(0.5, 0.7, 1.0);
 
-    // Рассеивание на краях
-    float rim = pow(1.0 - facingCamera, 2.0);
-
-    // Высотное затухание
-    float heightFactor = smoothstep(0.0, 1.0, 1.0 - vHeight * 10.0);
+    // Эффект на краях (более заметный)
+    float rim = pow(1.0 - max(0.0, dot(viewDir, normal)), 1.5);
 
     // Смешиваем цвета
-    vec3 finalColor = mix(atmosphereColor, vec3(1.0), cloudIntensity * 0.6);
+    vec3 finalColor = mix(atmosphereColor, vec3(1.0), cloudIntensity * 0.7);
+
+    // Добавляем свечение от солнца
+    vec3 lightDir = normalize(lightPos - vFragPos);
+    float sunEffect = pow(max(0.0, dot(viewDir, -lightDir)), 8.0);
+    finalColor = mix(finalColor, vec3(1.0, 0.95, 0.8), sunEffect * 0.3);
 
     // Настраиваем прозрачность
-    float alpha = (cloudIntensity * 0.5 + rim * 0.3) * heightFactor;
-    alpha *= facingCamera; // Уменьшаем прозрачность для граней, отвернутых от камеры
-    alpha = clamp(alpha, 0.0, 0.7);
-
-    // Если прозрачность слишком низкая, отбрасываем фрагмент
-    if (alpha < 0.05) {
-        discard;
-    }
+    float alpha = (cloudIntensity * 0.6 + rim * 0.4);
+    alpha = clamp(alpha, 0.2, 0.8); // Увеличиваем базовую прозрачность
 
     fragColor = vec4(finalColor, alpha);
 }
