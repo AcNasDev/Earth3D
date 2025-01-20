@@ -115,7 +115,6 @@ void SatelliteRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& v
     glEnable(GL_MULTISAMPLE);
 
     for (const auto& satellite : satellites) {
-        qDebug() << satellite.id << satellite.isSelected;
         QMatrix4x4 satMatrix = model;
         satMatrix.translate(satellite.position);
 

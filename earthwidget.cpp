@@ -138,16 +138,7 @@ void EarthWidget::mousePressEvent(QMouseEvent *event)
     if (event->button() == Qt::LeftButton) {
         isMousePressed = true;
         lastMousePos = event->pos();
-
-        int pickedId = pickSatellite(event->pos());
-        if (pickedId != selectedSatelliteId) {
-            if (selectedSatelliteId != -1) {
-                satellites[selectedSatelliteId].isSelected = false;
-            }
-        }
-        if(pickedId != -1) {
-            satellites[pickedId].isSelected = true;
-        }
+        pickSatellite(event->pos());
         satelliteRenderer->updateSatellites(satellites);
         update();
     }
@@ -249,11 +240,12 @@ int EarthWidget::pickSatellite(const QPoint& mousePos)
             closestSatelliteId = satellite.id;
         }
     }
-
-    if (closestSatelliteId != -1) {
-        selectedSatelliteId = closestSatelliteId;
-    } else {
-        selectedSatelliteId = -1;
+    if(selectedSatelliteId != closestSatelliteId && selectedSatelliteId != -1){
+        satellites[selectedSatelliteId].isSelected = false;
+    }
+    selectedSatelliteId = closestSatelliteId;
+    if(selectedSatelliteId != -1){
+        satellites[selectedSatelliteId].isSelected = true;
     }
 
     update();  // Убедитесь, что это вызывается
