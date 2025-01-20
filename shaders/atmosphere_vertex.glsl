@@ -15,13 +15,13 @@ out float vHeight;
 out vec2 vTexCoord;
 
 void main() {
-    // Используем оригинальные текстурные координаты из атласа
+    // Анимация текстурных координат
     vTexCoord = texCoord;
+    vTexCoord.x = fract(texCoord.x - time * 0.01); // Скорость анимации
 
-    // Анимируем текстурные координаты по горизонтали
-    vTexCoord.x = fract(texCoord.x - time * 0.01);
+    // Поднимаем атмосферу чуть выше поверхности
+    vec3 atmospherePos = position * 1.00; // Увеличили множитель с 1.02 до 1.025
 
-    vec3 atmospherePos = position * 1.02; // Немного поднимаем атмосферу
     vFragPos = vec3(modelMatrix * vec4(atmospherePos, 1.0));
     vNormal = mat3(transpose(inverse(modelMatrix))) * normal;
     vHeight = length(atmospherePos) - length(position);
