@@ -144,13 +144,12 @@ void EarthWidget::mousePressEvent(QMouseEvent *event)
             if (selectedSatelliteId != -1) {
                 satellites[selectedSatelliteId].isSelected = false;
             }
-            selectedSatelliteId = pickedId;
-            if (selectedSatelliteId != -1) {
-                satellites[selectedSatelliteId].isSelected = true;
-            }
-            satelliteRenderer->updateSatellites(satellites);
-            update();
         }
+        if(pickedId != -1) {
+            satellites[pickedId].isSelected = true;
+        }
+        satelliteRenderer->updateSatellites(satellites);
+        update();
     }
 }
 
