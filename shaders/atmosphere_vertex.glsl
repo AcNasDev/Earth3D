@@ -12,13 +12,16 @@ uniform float time;
 out vec3 vFragPos;
 out vec3 vNormal;
 out float vHeight;
-out vec2 vTexCoord;  // Добавляем выход для текстурных координат
+out vec2 vTexCoord;
 
 void main() {
-    // Сдвигаем текстурные координаты для анимации
-    vTexCoord = vec2(texCoord.x + time * 0.01, texCoord.y);  // Анимация по X
+    // Корректируем текстурные координаты
+    vec2 adjustedTexCoord = texCoord;
+    adjustedTexCoord.x = fract(texCoord.x - time * 0.05); // Используем fract для плавного повторения
+    adjustedTexCoord.y = texCoord.y;
+    vTexCoord = adjustedTexCoord;
 
-    vec3 atmospherePos = position * 1.925;
+    vec3 atmospherePos = position * 1.05;
     vFragPos = vec3(modelMatrix * vec4(atmospherePos, 1.0));
     vNormal = mat3(transpose(inverse(modelMatrix))) * normal;
     vHeight = length(atmospherePos) - length(position);

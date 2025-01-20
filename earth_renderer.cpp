@@ -102,6 +102,13 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
 
     vao.bind();
 
+    glEnable(GL_DEPTH_TEST);
+    glDepthMask(GL_TRUE);
+    glDepthFunc(GL_LESS);
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);
+
     // Установка матриц
     program.setUniformValue("projectionMatrix", projection);
     program.setUniformValue("viewMatrix", view);

@@ -16,16 +16,21 @@ void AtmosphereRenderer::initialize() {
         return;
     }
     initShaders();
-    initTextures();  // Добавляем инициализацию текстур
+    initTextures();  // Добавляем вызов initTextures
     initGeometry();
 }
 
 void AtmosphereRenderer::initTextures() {
     QString buildDir = QCoreApplication::applicationDirPath();
-
     skyTexture = std::make_unique<TileTextureManager>(
         buildDir + "/textures/earth_clouds.jpg", RINGS, SEGMENTS);
     skyTexture->initialize();
+
+    // Устанавливаем параметры текстурирования
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
 }
 
 void AtmosphereRenderer::initShaders() {
@@ -38,7 +43,7 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     if (!program.bind())
         return;
 
-    time += 0.016f; // Примерно 60 FPS
+    time += 0.016f;
 
     vao.bind();
 
@@ -51,19 +56,35 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     program.setUniformValue("lightPos", cameraPos);
     program.setUniformValue("time", time);
 
-    // Привязываем текстуру неба
+    // Привязываем текстуру облаков
     glActiveTexture(GL_TEXTURE0);
     skyTexture->bindTileTexture(0, 0);
     program.setUniformValue("skyTexture", 0);
 
+    // Сохраняем текущие состояния OpenGL
+    GLboolean depthTest, blend, cullFace;
+    glGetBooleanv(GL_DEPTH_TEST, &depthTest);
+    glGetBooleanv(GL_BLEND, &blend);
+    glGetBooleanv(GL_CULL_FACE, &cullFace);
+
+    // Настраиваем состояния для рендеринга атмосферы
+    glEnable(GL_DEPTH_TEST);
+    glDepthFunc(GL_LEQUAL);  // Изменяем функцию теста глубины
+
+    glEnable(GL_CULL_FACE);
+    glCullFace(GL_BACK);     // Отсекаем задние грани
+    glFrontFace(GL_CCW);     // Устанавливаем порядок вершин против часовой стрелки
+
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-    glDepthMask(GL_FALSE);
 
+    // Рисуем атмосферу
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);
 
-    glDepthMask(GL_TRUE);
-    glDisable(GL_BLEND);
+    // Восстанавливаем предыдущие состояния OpenGL
+    if (!depthTest) glDisable(GL_DEPTH_TEST);
+    if (!blend) glDisable(GL_BLEND);
+    if (!cullFace) glDisable(GL_CULL_FACE);
 
     vao.release();
     program.release();
@@ -109,8 +130,10 @@ void AtmosphereRenderer::createSphere() {
 
             QVector3D position = sphericalToCartesian(radius, phi, theta);
             QVector3D normal = position.normalized();
+
+            // Корректируем текстурные координаты
             float u = float(segment) / SEGMENTS;
-            float v = float(ring) / RINGS;
+            float v = 1.0f - float(ring) / RINGS; // Инвертируем v координату
 
             vertices.append({position, QVector2D(u, v), normal});
 
