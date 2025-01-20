@@ -1,0 +1,346 @@
+# Prerequisites and Object files
+*.d
+*.slo
+*.lo
+*.o
+*.obj
+*.ko
+*.elf
+*.ilk
+
+# Precompiled Headers
+*.gch
+*.pch
+*.ipch
+
+# Compiled Dynamic libraries
+*.so
+*.so.*
+*.dylib
+*.dll
+*.mdb
+*.pdb
+
+# Fortran module files
+*.mod
+*.smod
+*.def
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+*.lo
+*.exp
+
+# Executables
+*.exe
+*.out
+*.app
+*.i*86
+*.x86_64
+*.hex
+*.pyc
+*.pyo
+
+# Debug files
+*.dSYM/
+*.su
+*.idb
+*.pdb
+core
+core.*
+
+# CMake
+build/
+Build/
+BUILD/
+out/
+cmake-build-*/
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+CMakeScripts/
+_deps/
+CMakeLists.txt.user
+CMakeUserPresets.json
+compile_commands.json
+CTestTestfile.cmake
+Testing/
+DartConfiguration.tcl
+install_manifest.txt
+
+# IDEs and editors
+## Visual Studio
+.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.userosscache
+*.sdf
+*.opensdf
+*.VC.db
+*.VC.VC.opendb
+*.psess
+*.vsp
+*.vspx
+*.vssscc
+*_i.c
+*_p.c
+*.ncb
+*.tlb
+*.tlh
+*.bak
+*.cache
+*.ilk
+*.meta
+
+## Visual Studio Code
+.vscode/
+*.code-workspace
+.history/
+
+## JetBrains IDEs
+.idea/
+*.iml
+*.iws
+*.ipr
+cmake-build-*/
+.idea_modules/
+
+## Eclipse
+.settings/
+.project
+.cproject
+.classpath
+.buildpath
+.metadata
+.loadpath
+
+## Sublime Text
+*.sublime-workspace
+*.sublime-project
+
+## CLion
+.clangd/
+.cache/
+
+# OS specific files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.lnk
+
+# GLSL and shader files
+*.spv
+*.spirv
+*.cache
+*.shader.bin
+*.comp
+*.frag.spv
+*.vert.spv
+*.tesc.spv
+*.tese.spv
+*.geom.spv
+*.comp.spv
+shader.cache
+
+# Dependency directories
+external/
+extern/
+deps/
+dependencies/
+third_party/
+vendor/
+lib/
+libs/
+packages/
+node_modules/
+
+# Build directories
+bin/
+obj/
+Debug/
+Release/
+x64/
+x86/
+Win32/
+MinSizeRel/
+RelWithDebInfo/
+[Bb]uild/
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+# Generated files
+*.generated.h
+*.generated.cpp
+moc_*.cpp
+qrc_*.cpp
+ui_*.h
+GeneratedFiles/
+Generated_Code/
+*_automoc.cpp
+*AutoGen*
+*_gen.h
+*_gen.cpp
+*.g.cs
+*.g.i.cs
+*.g.resources
+
+# Logs and databases
+*.log
+*.sql
+*.sqlite
+*.sqlite3
+*.db
+*.db-shm
+*.db-wal
+trace.txt
+*.trace
+crashlytics-build.properties
+
+# Backup & temporary files
+*~
+*.bak
+*.backup
+*.old
+*.orig
+*.swp
+*.swo
+*.swn
+*.tmp
+*.temp
+.*.sw[a-z]
+*#
+.#*
+\#*\#
+TAGS
+tags
+.tags
+.tags_sorted_by_file
+.netrwhist
+
+# Code coverage & testing
+*.gcno
+*.gcda
+*.gcov
+coverage/
+coverage.xml
+*.cover
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+.nox/
+htmlcov/
+test-results/
+TestResults/
+
+# Profiling data
+gmon.out
+callgrind.out.*
+perf.data*
+*.prof
+*.heap
+*.profile
+profile.txt
+
+# Package and compression files
+*.7z
+*.dmg
+*.gz
+*.iso
+*.jar
+*.rar
+*.tar
+*.zip
+*.tgz
+*.bzip
+*.bz2
+*.xz
+*.lzma
+*.cab
+*.msix
+*.msixbundle
+*.appx
+*.appxbundle
+
+# Documentation
+docs/_build/
+doc/_build/
+documentation/build/
+site/
+
+# Environment and configuration
+.env
+.env.local
+.env.*.local
+.venv
+env/
+venv/
+ENV/
+.python-version
+.ruby-version
+.node-version
+
+# Miscellaneous
+.gitattributes
+.editorconfig
+.dir-locals.el
+*.pid
+*.seed
+*.pid.lock
+.grunt
+.eslintcache
+.stylelintcache
+*.ctxt
+.history
+.sass-cache/
+.gradle/
+local.properties
+.classpath
+.factorypath
+.apt_generated/
+.apt_generated_test/
+
+# Hardware-specific
+*.bin
+*.rom
+*.sym
+
+# Resource files
+*.res
+*.rc
+resource.h
+
+# Dependency management
+conan.lock
+conanbuildinfo.*
+conaninfo.txt
+graph_info.json
+
+# Makefiles
+Makefile.*
+*.make
+*.mk
+!CMakeLists.txt
+
+# Patch & diff files
+*.patch
+*.diff
+*.orig
+*.rej
