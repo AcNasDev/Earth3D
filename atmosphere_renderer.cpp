@@ -4,7 +4,7 @@
 
 AtmosphereRenderer::AtmosphereRenderer(float earthRadius)
     : Renderer()
-    , radius(earthRadius * 1.15f)
+    , radius(earthRadius * 1.05f)
 {
 }
 
@@ -43,7 +43,7 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     if (!program.bind())
         return;
 
-    time += 0.016f;
+    update(0.016f);
 
     vao.bind();
 
@@ -54,7 +54,7 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     program.setUniformValue("modelMatrix", model);
     program.setUniformValue("viewPos", cameraPos);
     program.setUniformValue("lightPos", cameraPos);
-    program.setUniformValue("time", time);
+    program.setUniformValue("cloudRotationMatrix", cloudRotationMatrix);
 
     // Привязываем текстуру облаков
     glActiveTexture(GL_TEXTURE0);
@@ -190,4 +190,15 @@ QVector3D AtmosphereRenderer::sphericalToCartesian(float radius, float phi, floa
     float y = radius * cos(phi);
     float z = radius * sin(phi) * sin(theta);
     return QVector3D(x, y, z);
+}
+
+void AtmosphereRenderer::update(float deltaTime) {
+    // Обновляем угол вращения (настройте скорость по необходимости)
+    float rotationSpeed = 0.02f; // радиан в секунду
+    rotationAngle += rotationSpeed * deltaTime;
+
+    // Создаем матрицу вращения вокруг оси Y
+    cloudRotationMatrix.setToIdentity();
+    cloudRotationMatrix.rotate(QQuaternion::fromAxisAndAngle(QVector3D(0, 1, 0),
+                                                             qRadiansToDegrees(rotationAngle)));
 }

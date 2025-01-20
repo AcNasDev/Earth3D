@@ -4,27 +4,26 @@ in vec3 position;
 in vec2 texCoord;
 in vec3 normal;
 
+out vec2 vTexCoord;
+out vec3 vNormal;
+out vec3 vFragPos;
+
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
-uniform float time;
-
-out vec3 vFragPos;
-out vec3 vNormal;
-out float vHeight;
-out vec2 vTexCoord;
+uniform mat4 cloudRotationMatrix; // Добавляем матрицу вращения для облаков
 
 void main() {
-    // Анимация текстурных координат
+    // Применяем матрицу вращения к позиции для анимации облаков
+    vec4 rotatedPosition = cloudRotationMatrix * vec4(position * 1.025, 1.0);
+    vec4 worldPos = modelMatrix * rotatedPosition;
+
     vTexCoord = texCoord;
-    vTexCoord.x = fract(texCoord.x - time * 0.01); // Скорость анимации
+    vFragPos = worldPos.xyz;
 
-    // Поднимаем атмосферу чуть выше поверхности
-    vec3 atmospherePos = position * 1.00; // Увеличили множитель с 1.02 до 1.025
+    // Применяем матрицу вращения к нормалям
+    mat3 normalMatrix = transpose(inverse(mat3(modelMatrix * cloudRotationMatrix)));
+    vNormal = normalize(normalMatrix * normal);
 
-    vFragPos = vec3(modelMatrix * vec4(atmospherePos, 1.0));
-    vNormal = mat3(transpose(inverse(modelMatrix))) * normal;
-    vHeight = length(atmospherePos) - length(position);
-
-    gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(atmospherePos, 1.0);
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
 }

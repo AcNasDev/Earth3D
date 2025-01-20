@@ -19,11 +19,13 @@ protected:
     void initTextures();  // Добавляем метод для инициализации текстур
 
 private:
+    QMatrix4x4 cloudRotationMatrix;
+    float rotationAngle = 0.0f;
     void createSphere();
     QVector3D sphericalToCartesian(float radius, float phi, float theta) const;
+    void update(float deltaTime);
 
     float radius;
-    float time = 0.0f;
 
     QOpenGLBuffer ibo{QOpenGLBuffer::IndexBuffer};
 
@@ -38,8 +40,8 @@ private:
 
     QVector<Vertex> vertices;
     QVector<GLuint> indices;
-    const int RINGS = 16;
-    const int SEGMENTS = 16;
+    const int RINGS = 32;
+    const int SEGMENTS = 32;
 };
 
 #endif // ATMOSPHERE_RENDERER_H
