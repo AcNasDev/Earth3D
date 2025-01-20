@@ -38,8 +38,8 @@ private:
 
     QVector<Vertex> vertices;
     QVector<GLuint> indices;
-    const int RINGS = 128;
-    const int SEGMENTS = 256;
+    const int RINGS = 16;
+    const int SEGMENTS = 16;
 };
 
 #endif // ATMOSPHERE_RENDERER_H
