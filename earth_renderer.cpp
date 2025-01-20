@@ -59,6 +59,24 @@ void EarthRenderer::initTextures() {
     earthTextureTiles->initialize();
     heightMapTiles->initialize();
     normalMapTiles->initialize();
+
+    // Новые текстуры
+    nightLightsTiles = std::make_unique<TileTextureManager>(
+        buildDir + "/textures/earth_night.jpg", RINGS, SEGMENTS);
+    cloudTiles = std::make_unique<TileTextureManager>(
+        buildDir + "/textures/earth_clouds.jpg", RINGS, SEGMENTS);
+    specularTiles = std::make_unique<TileTextureManager>(
+        buildDir + "/textures/earth_specular.jpg", RINGS, SEGMENTS);
+    temperatureTiles = std::make_unique<TileTextureManager>(
+        buildDir + "/textures/earth_temperature.jpg", RINGS, SEGMENTS);
+    snowTiles = std::make_unique<TileTextureManager>(
+        buildDir + "/textures/earth_snow.jpg", RINGS, SEGMENTS);
+
+    nightLightsTiles->initialize();
+    cloudTiles->initialize();
+    specularTiles->initialize();
+    temperatureTiles->initialize();
+    snowTiles->initialize();
 }
 
 void EarthRenderer::initGeometry() {
@@ -104,6 +122,27 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     glActiveTexture(GL_TEXTURE2);
     normalMapTiles->bindTileTexture(0, 0);
     program.setUniformValue("normalMap", 2);
+
+    // Новые текстуры
+    glActiveTexture(GL_TEXTURE3);
+    nightLightsTiles->bindTileTexture(0, 0);
+    program.setUniformValue("nightLightMap", 3);
+
+    glActiveTexture(GL_TEXTURE4);
+    cloudTiles->bindTileTexture(0, 0);
+    program.setUniformValue("cloudMap", 4);
+
+    glActiveTexture(GL_TEXTURE5);
+    specularTiles->bindTileTexture(0, 0);
+    program.setUniformValue("specularMap", 5);
+
+    glActiveTexture(GL_TEXTURE6);
+    temperatureTiles->bindTileTexture(0, 0);
+    program.setUniformValue("temperatureMap", 6);
+
+    glActiveTexture(GL_TEXTURE7);
+    snowTiles->bindTileTexture(0, 0);
+    program.setUniformValue("snowMap", 7);
 
     // Рендерим всю геометрию за один draw call
     glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, nullptr);

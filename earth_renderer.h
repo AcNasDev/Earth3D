@@ -29,6 +29,12 @@ private:
     std::unique_ptr<TileTextureManager> heightMapTiles;
     std::unique_ptr<TileTextureManager> normalMapTiles;
 
+    std::unique_ptr<TileTextureManager> nightLightsTiles;
+    std::unique_ptr<TileTextureManager> cloudTiles;
+    std::unique_ptr<TileTextureManager> specularTiles;
+    std::unique_ptr<TileTextureManager> temperatureTiles;
+    std::unique_ptr<TileTextureManager> snowTiles;
+
     float radius;
 
     struct Vertex {

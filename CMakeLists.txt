@@ -22,6 +22,11 @@ file(COPY
     ${CMAKE_SOURCE_DIR}/textures/earth.jpg
     ${CMAKE_SOURCE_DIR}/textures/earth_height.png
     ${CMAKE_SOURCE_DIR}/textures/earth_normal.png
+    ${CMAKE_SOURCE_DIR}/textures/earth_night.jpg
+    ${CMAKE_SOURCE_DIR}/textures/earth_clouds.jpg
+    ${CMAKE_SOURCE_DIR}/textures/earth_specular.jpg
+    ${CMAKE_SOURCE_DIR}/textures/earth_temperature.jpg
+    ${CMAKE_SOURCE_DIR}/textures/earth_snow.jpg
     DESTINATION ${CMAKE_BINARY_DIR}/textures
 )
 
