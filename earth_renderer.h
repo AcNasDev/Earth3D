@@ -4,6 +4,7 @@
 
 #include "renderer.h"
 #include "tile_texture_manager.h"
+#include "atmosphere_renderer.h"
 #include <QOpenGLBuffer>
 #include <QMatrix4x4>
 
@@ -34,6 +35,7 @@ private:
     std::unique_ptr<TileTextureManager> specularTiles;
     std::unique_ptr<TileTextureManager> temperatureTiles;
     std::unique_ptr<TileTextureManager> snowTiles;
+    std::unique_ptr<AtmosphereRenderer> atmosphereRenderer;
 
     float radius;
 

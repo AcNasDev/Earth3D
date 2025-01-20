@@ -11,16 +11,15 @@ uniform mat4 modelMatrix;
 out vec3 vFragPos;
 out vec3 vNormal;
 out float vHeight;
+out vec2 vTexCoord;  // Добавляем выходную переменную для текстурных координат
 
 void main() {
-    // Увеличиваем радиус для атмосферы (на 2% больше радиуса Земли)
-    vec3 atmospherePos = position * 1.02;
+    vec3 atmospherePos = position * 1.025;
 
     vFragPos = vec3(modelMatrix * vec4(atmospherePos, 1.0));
     vNormal = mat3(transpose(inverse(modelMatrix))) * normal;
-
-    // Высота относительно поверхности Земли
     vHeight = length(atmospherePos) - length(position);
+    vTexCoord = texCoord;  // Передаем текстурные координаты
 
     gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(atmospherePos, 1.0);
 }

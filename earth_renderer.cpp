@@ -16,6 +16,7 @@ EarthRenderer::~EarthRenderer() {
         ibo.destroy();
     if (vao.isCreated())
         vao.destroy();
+    atmosphereRenderer.reset();
 }
 
 void EarthRenderer::initialize() {
@@ -27,6 +28,10 @@ void EarthRenderer::initialize() {
     initShaders();
     initTextures();
     initGeometry();
+
+    // Инициализация атмосферы
+    atmosphereRenderer = std::make_unique<AtmosphereRenderer>(radius);
+    atmosphereRenderer->initialize();
 }
 
 void EarthRenderer::initShaders() {
@@ -128,9 +133,9 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
     nightLightsTiles->bindTileTexture(0, 0);
     program.setUniformValue("nightLightMap", 3);
 
-    glActiveTexture(GL_TEXTURE4);
-    cloudTiles->bindTileTexture(0, 0);
-    program.setUniformValue("cloudMap", 4);
+    // glActiveTexture(GL_TEXTURE4);
+    // cloudTiles->bindTileTexture(0, 0);
+    // program.setUniformValue("cloudMap", 4);
 
     glActiveTexture(GL_TEXTURE5);
     specularTiles->bindTileTexture(0, 0);
@@ -149,6 +154,10 @@ void EarthRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& view,
 
     vao.release();
     program.release();
+
+    // if (atmosphereRenderer) {
+        atmosphereRenderer->render(projection, view, model);
+    // }
 }
 
 void EarthRenderer::createSphere() {
