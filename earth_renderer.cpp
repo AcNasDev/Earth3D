@@ -29,7 +29,7 @@ void EarthRenderer::initialize() {
     initTextures();
     initGeometry();
 
-    // Инициализация атмосферы
+    // Инициализируем атмосферу с тем же радиусом
     atmosphereRenderer = std::make_unique<AtmosphereRenderer>(radius);
     atmosphereRenderer->initialize();
 }

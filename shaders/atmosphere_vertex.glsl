@@ -7,19 +7,21 @@ in vec3 normal;
 uniform mat4 projectionMatrix;
 uniform mat4 viewMatrix;
 uniform mat4 modelMatrix;
+uniform float time;
 
 out vec3 vFragPos;
 out vec3 vNormal;
 out float vHeight;
-out vec2 vTexCoord;  // Добавляем выходную переменную для текстурных координат
+out vec2 vTexCoord;  // Добавляем выход для текстурных координат
 
 void main() {
-    vec3 atmospherePos = position * 1.025;
+    // Сдвигаем текстурные координаты для анимации
+    vTexCoord = vec2(texCoord.x + time * 0.01, texCoord.y);  // Анимация по X
 
+    vec3 atmospherePos = position * 1.925;
     vFragPos = vec3(modelMatrix * vec4(atmospherePos, 1.0));
     vNormal = mat3(transpose(inverse(modelMatrix))) * normal;
     vHeight = length(atmospherePos) - length(position);
-    vTexCoord = texCoord;  // Передаем текстурные координаты
 
     gl_Position = projectionMatrix * viewMatrix * modelMatrix * vec4(atmospherePos, 1.0);
 }

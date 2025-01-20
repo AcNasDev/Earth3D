@@ -38,7 +38,7 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     if (!program.bind())
         return;
 
-    time += 0.016f;
+    time += 0.016f; // Примерно 60 FPS
 
     vao.bind();
 
@@ -56,7 +56,6 @@ void AtmosphereRenderer::render(const QMatrix4x4& projection, const QMatrix4x4& 
     skyTexture->bindTileTexture(0, 0);
     program.setUniformValue("skyTexture", 0);
 
-    // Включаем прозрачность
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDepthMask(GL_FALSE);
